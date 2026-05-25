@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MTP Speculative Decoding Pipeline Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        .mtp-head { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .head-active { border-color: #22d3ee !important; background: rgba(34, 211, 238, 0.15) !important; color: #22d3ee !important; font-weight: bold; box-shadow: 0 0 12px rgba(34, 211, 238, 0.2); }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-cyan-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-cyan-500 to-purple-600 rounded-lg">
+                    <i class="fa-solid fa-layer-group text-xl text-slate-950"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">Multi-Token Prediction (MTP) Speculative Engine</span>
+                    <span class="text-xs text-slate-400 block font-mono">Visualizing Parallel Head Speculation, Causal Tree Attention, and Single-Model Verification Acceleration</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-cyan-400 font-bold">
+                MTP Hardware Acceleration
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-2xl font-black text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-circle-nodes text-purple-400"></i> The MTP Advantage: Eliminating the Draft Model
+            </h2>
+            <p class="text-slate-400 text-sm leading-relaxed mb-6">
+                Standard speculative decoding accelerates text generation by coupling a small draft model with a large target model. However, managing two models introduces VRAM synchronization lag. **Multi-Token Prediction (MTP)** solves this by dropping the secondary model entirely. It integrates multiple independent, lightweight **prediction heads** directly on top of the base model's final backbone layer, outputting a parallel tree of speculative tokens in a single forward pass.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-purple-400 mb-1">Parallel Head Speculation</h3>
+                    <p class="text-slate-400 leading-relaxed">The main model backbone computes the standard hidden state vector ($h_t$). Instead of stopping at one word, the vector is split into parallel, independent linear heads. $Head_1$ predicts token $t+1$, $Head_2$ predicts $t+2$, and $Head_3$ predicts $t+3$ simultaneously.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-cyan-400 mb-1">Causal Tree Attention</h3>
+                    <p class="text-slate-400 leading-relaxed">The multiple predicted token paths form a top-k tree structure. To verify these possibilities at the same time, the model uses a custom <strong>Tree Attention Mask</strong>. This mask permits the model to validate every branch candidate concurrently without cross-contaminating contextual histories.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-emerald-400 mb-1">Single-Model Verification</h3>
+                    <p class="text-slate-400 leading-relaxed">During the next computation pass, the base model verifies the candidate tree paths in parallel. If the primary LM head confirms a branch match, it accepts multiple tokens at once, cutting out the typical cross-model latency of older workflows.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+            <div class="mb-4">
+                <span class="text-[10px] uppercase font-mono tracking-widest font-bold px-2 py-0.5 rounded border border-slate-700 text-slate-400 bg-slate-950">MTP Pipeline Monitor Terminal</span>
+                <h2 class="text-2xl font-black text-white mt-1">Parallel MTP Head Allocation Mapping</h2>
+                <p class="text-slate-400 text-sm mt-0.5">Click through the pipeline stages below to trace how hidden states feed parallel prediction heads to compile a speculative token tree.</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                <div class="lg:col-span-5 flex flex-col gap-3" id="mtp-stepper-container">
+                    </div>
+
+                <div class="lg:col-span-7 bg-slate-950 border border-slate-800 rounded-xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                            <span class="text-xs font-bold tracking-wide text-white uppercase font-mono">Model Backbone Head Topology</span>
+                            <span id="step-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">INIT</span>
+                        </div>
+
+                        <div class="mb-6 space-y-3 font-mono text-xs">
+                            <span class="text-[9px] text-slate-500 uppercase block tracking-wider font-bold">Active MTP Projection Channels</span>
+                            <div class="p-3 bg-slate-900/40 border border-slate-800 rounded-xl text-center font-bold text-white mb-2">
+                                Model Backbone State Tensor ($h_t$)
+                            </div>
+                            <div class="grid grid-cols-3 gap-2 text-center">
+                                <div id="mtp-head-1" class="p-3 bg-slate-900/20 border border-slate-800 rounded text-slate-500 mtp-head">Head 1 (Token +1)</div>
+                                <div id="mtp-head-2" class="p-3 bg-slate-900/20 border border-slate-800 rounded text-slate-500 mtp-head">Head 2 (Token +2)</div>
+                                <div id="mtp-head-3" class="p-3 bg-slate-900/20 border border-slate-800 rounded text-slate-500 mtp-head">Head 3 (Token +3)</div>
+                            </div>
+                        </div>
+
+                        <div id="narrative-box" class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Select a pipeline operational state to execute matrix trace summaries...
+                        </div>
+                    </div>
+
+                    <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                        <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                            <span><i class="fa-solid fa-square-root-variable text-cyan-400 mr-1.5"></i> mtp_projection_layer.tex</span>
+                            <span class="text-slate-500 uppercase font-bold text-[9px]">Head Projection</span>
+                        </div>
+                        <div class="p-4 text-center bg-black min-h-[60px] flex items-center justify-center text-xs text-cyan-400" id="latex-box">
+                            $$\text{Mathematical Matrix Map}$$
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        LLM Multi-Token Prediction (MTP) Speculative Execution Blueprint
+    </footer>
+
+    <script>
+        const mtpPipeline = [
+            {
+                title: "1. Backbone Hidden State Extraction",
+                summary: "The final model layer extracts the baseline feature tensor ($h_t$).",
+                narrative: "The input context moves through the core transformer layer blocks. Instead of evaluating just one token prediction path at the final layer, the system extracts the baseline hidden state vector $h_t$ from the backbone network, preparing to fork it across the parallel projection array.",
+                latex: "h_t = \\text{TransformerBackbone}(X)",
+                badge: "BASE LAYER TENSOR EXTRACTION",
+                activeHeads: []
+            },
+            {
+                title: "2. Parallel Lookahead Speculation",
+                summary: "Lightweight linear heads generate multiple token guesses simultaneously.",
+                narrative: "The baseline hidden state vector $h_t$ is injected into independent, lightweight linear projection heads in parallel. **Head 1, Head 2, and Head 3 process the same vector concurrently**, with each head predicting one step further down the lookahead path (+1, +2, and +3 tokens ahead).",
+                latex: "h_{t, k} = \\text{LinearHead}_k(h_t) \\quad \\rightarrow \\quad \\hat{y}_{t+k} = \\text{Softmax}(h_{t, k} \\cdot W_{\\text{unembed}})",
+                badge: "ASYMMETRIC MULTI-HEAD PROJECTION",
+                activeHeads: [1, 2, 3]
+            },
+            {
+                title: "3. Causal Tree Attention Masking",
+                summary: "The token choices are structured into a valid contextual tree branch.",
+                narrative: "The multiple lookahead tokens are structured into a <strong>Causal Tree Layout</strong>. To validate all potential paths simultaneously without crossing contextual histories, the model applies a custom <b>Tree Attention Mask Matrix</b>, grouping candidates into standalone, verifiable evaluation channels.",
+                latex: "M_{ij} = \\begin{cases} 0 & \\text{if } t_j \\in \\text{Ancestors}(t_i) \\\\ -\\infty & \\text{otherwise} \\end{cases}",
+                badge: "TREE ATTENTION MASK APPLICATION",
+                activeHeads: [1, 2, 3]
+            },
+            {
+                title: "4. Unified Verification & Acceptance",
+                summary: "The base model confirms or rejects the tree branches in parallel.",
+                narrative: "During the subsequent pass, the base model evaluates the entire candidate tree concurrently. If the primary language model head confirms the validity of a branch, it accepts those tokens simultaneously. This allows the system to emit multiple tokens in the time of a single validation pass.",
+                latex: "P_{\\text{base}}(t_{+k} | \\dots) \\ge \\text{Threshold} \\quad \\rightarrow \\quad \\text{Lock in } +k \\text{ Tokens at once}",
+                badge: "SINGLE-MODEL ACCELERATED GENERATION",
+                activeHeads: []
+            }
+        ];
+
+        function buildMtpInterface() {
+            const container = document.getElementById('mtp-stepper-container');
+            container.innerHTML = '';
+
+            mtpPipeline.forEach((step, idx) => {
+                const btn = document.createElement('button');
+                btn.id = `mtp-step-btn-${idx}`;
+                btn.onclick = () => runMtpTrace(idx);
+                btn.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+                
+                btn.innerHTML = `
+                    <div class="flex items-center justify-between w-full">
+                        <span class="font-bold text-xs text-white tracking-wide uppercase font-mono">${step.title}</span>
+                        <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
+                    </div>
+                    <p class="text-xs leading-normal font-medium text-slate-400">${step.summary}</p>
+                `;
+                container.appendChild(btn);
+            });
+        }
+
+        function runMtpTrace(stepIdx) {
+            const data = mtpPipeline[stepIdx];
+
+            mtpPipeline.forEach((_, idx) => {
+                const node = document.getElementById(`mtp-step-btn-${idx}`);
+                if(node) node.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+            });
+
+            const activeBtn = document.getElementById(`mtp-step-btn-${stepIdx}`);
+            if(activeBtn) {
+                activeBtn.className = "w-full text-left p-4 rounded-xl bg-slate-800/80 border border-cyan-400 text-cyan-400 transition-all duration-200 flex flex-col gap-1";
+            }
+
+            document.getElementById('step-badge').innerText = data.badge;
+            document.getElementById('narrative-box').innerHTML = data.narrative;
+
+            // Reset linear projection head node layouts style treatments
+            for (let i = 1; i <= 3; i++) {
+                const headNode = document.getElementById(`mtp-head-${i}`);
+                headNode.className = "p-3 bg-slate-900/20 border border-slate-800 rounded text-slate-500 mtp-head";
+            }
+
+            // Light up target heads linked to active steps actions variables
+            data.activeHeads.forEach(id => {
+                const headNode = document.getElementById(`mtp-head-${id}`);
+                headNode.className = "p-3 border rounded mtp-head head-active text-white";
+            });
+
+            // Parse matrix equations via MathJax using double backslashes to escape strings correctly
+            document.getElementById('latex-box').innerText = `$$${data.latex}$$`;
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        window.onload = () => {
+            buildMtpInterface();
+            runMtpTrace(0);
+        }
+    </script>
+</body>
+</html>

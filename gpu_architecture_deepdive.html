@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPU Architecture Memory Hierarchy Deep Dive</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght=300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        .hw-node { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .hw-active { border-color: #22d3ee !important; background: rgba(34, 211, 238, 0.1) !important; box-shadow: 0 0 15px rgba(34, 211, 238, 0.3); color: white !important; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-cyan-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-cyan-500 via-purple-500 to-amber-500 rounded-lg">
+                    <i class="fa-solid fa-microchip text-xl text-slate-950"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">GPU Hardware Memory Hierarchy Interactive Blueprint</span>
+                    <span class="text-xs text-slate-400 block font-mono">Visualizing Bandwidth Latency Trade-offs, Cache Interconnects, and Streaming Multiprocessors</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-cyan-400 font-bold">
+                Silicon Microarchitecture
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-2xl font-black text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-memory text-cyan-400"></i> The Memory Wall: Latency vs. Capacity
+            </h2>
+            <p class="text-slate-400 text-sm leading-relaxed mb-4">
+                In modern deep learning pipelines, compute power outpaces memory transfer rates. A GPU contains layers of specialized memory components to act as buffers. As you step closer to the processing cores, memory capacity shrinks drastically, but bandwidth increases exponentially. Reaching true execution speed relies completely on keeping your data sitting in the closest registers possible.
+            </p>
+            
+            <div class="overflow-x-auto custom-scrollbar mt-4">
+                <table class="w-full text-left border-collapse text-xs font-mono">
+                    <thead>
+                        <tr class="border-b border-slate-800 bg-slate-950 text-slate-400">
+                            <th class="p-3">Memory Tier</th>
+                            <th class="p-3">Location</th>
+                            <th class="p-3">Typical Bandwidth</th>
+                            <th class="p-3">Typical Latency</th>
+                            <th class="p-3">Primary Architectural Purpose</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/60 text-slate-300">
+                        <tr>
+                            <td class="p-3 font-bold text-cyan-400">Registers</td>
+                            <td class="p-3">Inside Execution Cores</td>
+                            <td class="p-3 text-emerald-400">~100+ TB/s</td>
+                            <td class="p-3 text-emerald-400">~1 cycle (Zero lag)</td>
+                            <td class="p-3">Holds immediate operands for active arithmetic instructions.</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 font-bold text-purple-400">SRAM (L1 / Shared Memory)</td>
+                            <td class="p-3">Inside Streaming Multiprocessor</td>
+                            <td class="p-3 text-emerald-400">~30+ TB/s</td>
+                            <td class="p-3 text-cyan-400">~20-30 cycles</td>
+                            <td class="p-3">Managed scratchpad for block-level data reuse (Tiling/FlashAttention).</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 font-bold text-amber-400">L2 Cache</td>
+                            <td class="p-3">On-Chip Centralized Layout</td>
+                            <td class="p-3 text-cyan-400">~5-10 TB/s</td>
+                            <td class="p-3 text-amber-400">~200 cycles</td>
+                            <td class="p-3">Cross-SM cache buffer that minimizes redundant memory fetches.</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 font-bold text-rose-400">HBM (High Bandwidth VRAM)</td>
+                            <td class="p-3">Off-Chip Stacked Silicon Modules</td>
+                            <td class="p-3 text-amber-400">~2-4 TB/s</td>
+                            <td class="p-3 text-red-400">~400-800 cycles</td>
+                            <td class="p-3">Stores the massive neural weights, model states, and optimizers.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+            <div class="mb-4">
+                <span class="text-[10px] uppercase font-mono tracking-widest font-bold px-2 py-0.5 rounded border border-slate-700 text-slate-400 bg-slate-950">Silicon Floorplan Blueprint</span>
+                <h2 class="text-2xl font-black text-white mt-1">On-Chip Component Topology Matrix</h2>
+                <p class="text-slate-400 text-sm mt-0.5">Click through the hardware components below to isolate their microarchitecture data pathways and mathematical constraints.</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                <div class="lg:col-span-5 flex flex-col gap-3" id="hw-stepper-container">
+                    </div>
+
+                <div class="lg:col-span-7 bg-slate-950 border border-slate-800 rounded-xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                            <span class="text-xs font-bold tracking-wide text-white uppercase font-mono">Hardware Component Mapping Scheme</span>
+                            <span id="step-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-cyan-400 font-bold">READY</span>
+                        </div>
+
+                        <div class="p-6 bg-slate-900/40 rounded-xl border border-slate-800 space-y-4 font-mono text-xs text-slate-500 mb-4 text-center">
+                            <div id="node-hbm" class="p-3 border border-slate-800 rounded-xl hw-node">
+                                <strong>Off-Chip Stacked High Bandwidth Memory (HBM)</strong>
+                            </div>
+                            
+                            <div class="text-slate-700 text-center"><i class="fa-solid fa-arrow-down-up-lock"></i> Cross-Silicon Memory Bus Line</div>
+
+                            <div id="node-l2" class="p-3 border border-slate-800 rounded-xl hw-node">
+                                <strong>Centralized On-Chip L2 Cache System</strong>
+                            </div>
+
+                            <div class="text-slate-700 text-center"><i class="fa-solid fa-network-wired"></i> Crossbar Fabric Interconnect Inter-Router</div>
+
+                            <div id="node-sm" class="p-4 border border-slate-800 rounded-xl hw-node space-y-3">
+                                <strong class="text-slate-400">Streaming Multiprocessor (SM Architecture Engine Block)</strong>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div id="node-sram" class="p-2 border border-slate-800 rounded bg-black/40 hw-node">On-Chip SRAM (L1 / Shared)</div>
+                                    <div id="node-registers" class="p-2 border border-slate-800 rounded bg-black/40 hw-node">Core Execution Registers</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="narrative-box" class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Select a microarchitecture tier from the control strip to trace internal data paths...
+                        </div>
+                    </div>
+
+                    <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                        <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                            <span><i class="fa-solid fa-square-root-variable text-cyan-400 mr-1.5"></i> architectural_scaling_metric.tex</span>
+                            <span class="text-slate-500 uppercase font-bold text-[9px]">Memory Bound</span>
+                        </div>
+                        <div class="p-4 text-center bg-black min-h-[60px] flex items-center justify-center text-xs text-cyan-400" id="latex-box">
+                            $$\text{Silicon Metric Objective}$$
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        GPU Hardware Architecture Floorplan Simulation Interface Map
+    </footer>
+
+    <script>
+        const gpuHardwarePipeline = [
+            {
+                title: "1. High Bandwidth Memory (HBM)",
+                summary: "The off-chip main memory reservoir housing model weights.",
+                narrative: "<strong>HBM (High Bandwidth Memory)</strong> sits adjacent to the main GPU die, linked via a microscopic silicon slice called an interposer. It acts as the primary reservoir for large models, storing billions of model weights, optimizer parameters, and activation layers. While its capacity is massive, its long data-path distance makes it high latency.",
+                latex: "\\text{Memory Cores State Access} \\quad \\rightarrow \\quad \\text{Latency } \\approx 400\\text{--}800 \\text{ clock cycles}",
+                badge: "OFF-CHIP HIGH EXPANSION STORAGE",
+                targetNodeIds: ["node-hbm"]
+            },
+            {
+                title: "2. Centralized L2 Cache",
+                summary: "An on-chip cache system shared across all processor cores.",
+                narrative: "Once variables traverse the main memory bus, they land in the centralized <strong>On-Chip L2 Cache System</strong>. The L2 cache stays directly on the silicon processing chip, acting as a massive data buffer shared among all Streaming Multiprocessors. If multiple processing cores require the same attention matrix variables, they pull them from L2, bypassing the slow trip back to HBM.",
+                latex: "\\text{Data Interconnect Reuse Factor} \\quad \\rightarrow \\quad \\text{Latency } \\approx 200 \\text{ clock cycles}",
+                badge: "ON-CHIP DATA REUSE LAYER",
+                targetNodeIds: ["node-l2"]
+            },
+            {
+                title: "3. Streaming Multiprocessors (SMs)",
+                summary: "The core parallel processing blocks where matrix math executes.",
+                narrative: "The <strong>Streaming Multiprocessor (SM)</strong> represents the fundamental hardware engine of the GPU. Modern enterprise GPUs pack over a hundred SMs into a single piece of silicon. Each SM functions as an independent powerhouse, containing dozens of Tensor Cores, floating-point units, and dedicated thread block dispatch schedulers that drive massive parallel computing tracks.",
+                latex: "\\text{Parallel Compute Scaling Block} \\quad \\rightarrow \\quad \\text{Throughput } \\propto \\text{Count of SMs} \\times \\text{Core Clock Freq}",
+                badge: "COMPUTE PROCESSING CORE ARRAY",
+                targetNodeIds: ["node-sm"]
+            },
+            {
+                title: "4. On-Chip SRAM (L1 / Shared Memory)",
+                summary: "A ultra-fast cache scratchpad localized inside each SM.",
+                narrative: "Tucked inside each independent Streaming Multiprocessor rests a tiny pool of highly volatile, ultra-fast **SRAM (Shared Memory / L1 Cache)**. This scratchpad is critical for software engineering optimizations like **FlashAttention**: instead of slow VRAM round-trips, programmers stream block segments (tiles) of context keys and values straight into SRAM, reusing them for localized matrix operations at near-zero lag.",
+                latex: "\\text{Hardware Cache Local Tiling Block} \\quad \\rightarrow \\quad \\text{Latency } \\approx 20\\text{--}30 \\text{ clock cycles}",
+                badge: "LOCALIZED BLOCK SCRATCHPAD REGISTERS",
+                targetNodeIds: ["node-sm", "node-sram"]
+            },
+            {
+                title: "5. Execution Registers Core Pool",
+                summary: "The fastest memory on earth, feeding immediate execution units.",
+                narrative: "The ultimate peak of the hardware hierarchy. <strong>Core Execution Registers</strong> sit directly within the mathematical processing units inside each SM. They represent the fastest memory arrays on earth. Threads lock parameters straight into registers to feed vector and matrix math instructions. The number of active registers determines how many execution loops a GPU can execute concurrently without context swapping constraints.",
+                latex: "\\text{Immediate Arithmetic Operands Buffer} \\quad \\rightarrow \\quad \\text{Latency } \\approx 1 \\text{ clock cycle}",
+                badge: "ZERO LAG CORE ARITHMETIC REGISTERS",
+                targetNodeIds: ["node-sm", "node-registers"]
+            }
+        ];
+
+        function buildHardwareInterface() {
+            const container = document.getElementById('hw-stepper-container');
+            container.innerHTML = '';
+
+            gpuHardwarePipeline.forEach((step, idx) => {
+                const btn = document.createElement('button');
+                btn.id = `hw-step-btn-${idx}`;
+                btn.onclick = () => runHardwareTrace(idx);
+                btn.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+                
+                btn.innerHTML = `
+                    <div class="flex items-center justify-between w-full">
+                        <span class="font-bold text-xs text-white tracking-wide uppercase font-mono">${step.title}</span>
+                        <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
+                    </div>
+                    <p class="text-xs leading-normal font-medium text-slate-400">${step.summary}</p>
+                `;
+                container.appendChild(btn);
+            });
+        }
+
+        function runHardwareTrace(stepIdx) {
+            const data = gpuHardwarePipeline[stepIdx];
+
+            gpuHardwarePipeline.forEach((_, idx) => {
+                const node = document.getElementById(`hw-step-btn-${idx}`);
+                if(node) node.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+            });
+
+            const activeBtn = document.getElementById(`hw-step-btn-${stepIdx}`);
+            if(activeBtn) {
+                activeBtn.className = "w-full text-left p-4 rounded-xl bg-slate-800/80 border border-cyan-400 text-cyan-400 transition-all duration-200 flex flex-col gap-1";
+            }
+
+            // Sync visual data text descriptors
+            document.getElementById('step-badge').innerText = data.badge;
+            document.getElementById('narrative-box').innerHTML = data.narrative;
+
+            // Reset floorplan map nodes styles parameters
+            const microNodesIds = ['node-hbm', 'node-l2', 'node-sm', 'node-sram', 'node-registers'];
+            microNodesIds.forEach(id => {
+                const el = document.getElementById(id);
+                if(el) {
+                    if (id === 'node-sram' || id === 'node-registers') {
+                        el.className = "p-2 border border-slate-800 rounded bg-black/40 hw-node text-slate-500";
+                    } else if (id === 'node-sm') {
+                        el.className = "p-4 border border-slate-800 rounded-xl hw-node space-y-3 text-slate-500";
+                    } else {
+                        el.className = "p-3 border border-slate-800 rounded-xl hw-node text-slate-500";
+                    }
+                }
+            });
+
+            // Target chosen hardware blueprint coordinates
+            data.targetNodeIds.forEach(id => {
+                const el = document.getElementById(id);
+                if(el) {
+                    if(id === 'node-sram' || id === 'node-registers') {
+                        el.className = "p-2 border rounded hw-node hw-active text-white font-bold";
+                    } else if(id === 'node-sm') {
+                        el.className = "p-4 border rounded-xl hw-node space-y-3 text-slate-300 border-dashed border-cyan-400/40";
+                    } else {
+                        el.className = "p-3 border rounded-xl hw-node hw-active text-white font-bold";
+                    }
+                }
+            });
+
+            // Parse text equations blocks matrices configurations frames safely via MathJax double backslashes
+            document.getElementById('latex-box').innerText = `$$${data.latex}$$`;
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        // Initialize application setups loops on page compile completions
+        window.onload = () => {
+            buildHardwareInterface();
+            runHardwareTrace(0);
+        }
+    </script>
+</body>
+</html>

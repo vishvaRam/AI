@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Quantization Deep Dive: AWQ vs GPTQ vs AutoRound</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        /* Matrix Cell Styling */
+        .q-cell { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .cell-salient { background: rgba(236, 72, 153, 0.25) !important; border: 1px solid #ec4899 !important; color: #f472b6 !important; font-weight: bold; }
+        .cell-optimized { background: rgba(168, 85, 247, 0.25) !important; border: 1px solid #a855f7 !important; color: #c084fc !important; font-weight: bold; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-purple-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-cyan-500 via-purple-500 to-emerald-500 rounded-lg">
+                    <i class="fa-solid fa-compress text-xl text-slate-950"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">LLM Advanced PTQ Formats Engine</span>
+                    <span class="text-xs text-slate-400 block font-mono">Comparing Loss Metrics, Activation Safeguards, and Rounding Optimization Pipelines</span>
+                </div>
+            </div>
+            
+            <div class="bg-slate-950 p-1 rounded-xl border border-slate-800 flex">
+                <button onclick="setQuantMode('gptq')" id="btn-gptq" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 text-slate-400">GPTQ</button>
+                <button onclick="setQuantMode('awq')" id="btn-awq" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 text-slate-400">AWQ</button>
+                <button onclick="setQuantMode('autoround')" id="btn-autoround" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 text-slate-400">AutoRound</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+            <div class="mb-4">
+                <span id="format-badge" class="text-[10px] uppercase font-mono tracking-widest font-bold px-2 py-0.5 rounded border text-slate-400 bg-slate-950">Format Mode Loaded</span>
+                <h2 id="format-title" class="text-2xl font-black text-white mt-1">Quantization Strategy Deep Dive</h2>
+                <p id="format-desc" class="text-slate-400 text-sm mt-0.5">Toggle between formats above to see how weights are modified across linear tensor rows.</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                <div class="lg:col-span-5 bg-slate-950 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+                    <div>
+                        <span class="text-[10px] font-mono text-slate-500 uppercase block mb-3">Weight Grid Tensor Space Reference</span>
+                        <div class="grid grid-cols-4 gap-2 font-mono text-xs text-center bg-black p-4 rounded-xl border border-slate-900" id="matrix-grid-container">
+                            </div>
+                    </div>
+                    <div class="mt-4 p-3 bg-slate-900/50 rounded-lg border border-slate-800 text-[10px] text-slate-400 font-mono flex items-center justify-between">
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 bg-slate-800 border border-slate-700 rounded-sm"></span> Standard (4-bit)</span>
+                        <span id="legend-special" class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 bg-purple-500 rounded-sm"></span> Protected</span>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
+                            <h3 class="text-xs font-bold tracking-wide text-white uppercase font-mono">Algorithmic Narrative</h3>
+                            <span id="speed-badge" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-950 font-bold">CALIBRATION SPEED</span>
+                        </div>
+                        <div id="narrative-box" class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Selecting configuration matrix context loops...
+                        </div>
+                    </div>
+
+                    <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                        <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                            <span><i class="fa-solid fa-square-root-variable mr-1.5 text-slate-400" id="math-icon"></i> optimization_objective.tex</span>
+                            <span class="text-slate-500 uppercase font-bold text-[9px]">PTQ Target</span>
+                        </div>
+                        <div class="p-4 text-center bg-black min-h-[65px] flex items-center justify-center text-xs" id="latex-box">
+                            $$\text{Loading math parameters}$$
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4 font-mono"><i class="fa-solid fa-layer-group text-cyan-400 mr-1.5"></i> Architectural Matrix Comparison</h3>
+            <div class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-left border-collapse text-xs font-mono">
+                    <thead>
+                        <tr class="border-b border-slate-800 bg-slate-950 text-slate-400">
+                            <th class="p-3">Quantization Format</th>
+                            <th class="p-3">Optimization Method</th>
+                            <th class="p-3">Bit-Width Capacity</th>
+                            <th class="p-3">Calibration VRAM Overhead</th>
+                            <th class="p-3">vLLM Serving Support</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/60">
+                        <tr>
+                            <td class="p-3 font-bold text-cyan-400">GPTQ</td>
+                            <td class="p-3 text-slate-300">Second-order Hessian Inverse error minimization</td>
+                            <td class="p-3 text-slate-400">2, 3, 4, 8 bits</td>
+                            <td class="p-3 text-amber-400">Minimal (Analytical solution)</td>
+                            <td class="p-3 text-emerald-400 font-bold"><i class="fa-solid fa-check"></i> Native Kernels</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 font-bold text-purple-400">AWQ</td>
+                            <td class="p-3 text-slate-300">Activation magnitude profiling per channel</td>
+                            <td class="p-3 text-slate-400">4-bit strictly (standard)</td>
+                            <td class="p-3 text-emerald-400">Ultra-Lightweight</td>
+                            <td class="p-3 text-emerald-400 font-bold"><i class="fa-solid fa-check"></i> Native Kernels</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 font-bold text-amber-400">AutoRound</td>
+                            <td class="p-3 text-slate-300">Signed Gradient Descent (Sign-SGD) tuning</td>
+                            <td class="p-3 text-slate-400">2, 3, 4, 8 bits & Mixed-precision</td>
+                            <td class="p-3 text-purple-400">Moderate (~200 steps per block)</td>
+                            <td class="p-3 text-emerald-400 font-bold"><i class="fa-solid fa-check"></i> Compressed Tensors</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        LLM Post-Training Quantization Strategy Comparison Framework Map
+    </footer>
+
+    <script>
+        let currentMode = 'autoround';
+
+        const quantizationConfigs = {
+            gptq: {
+                title: "GPTQ: Generalized Post-Training Quantization",
+                desc: "An analytical method that serializes weight compression layer-by-layer using inverse Hessian matrices.",
+                badge: "Analytical Hessian Minimization",
+                speed: "FAST RUNTIME (Minutes)",
+                speedColor: "text-cyan-400 bg-cyan-950 border-cyan-900",
+                color: "text-cyan-400",
+                mathIconColor: "text-cyan-400",
+                legendText: "Hessian Optimized",
+                legendClass: "bg-cyan-500",
+                narrative: "<strong>GPTQ</strong> optimizes weights sequentially by minimizing the squared error of layer outputs. It relies on second-order Taylor expansions, utilizing an inverse **Hessian matrix** to adjust remaining unquantized parameters whenever a specific column undergoes 4-bit rounding. This ensures robust compression, making it highly effective for running massive models on single-GPU hardware arrays.",
+                latex: "\\arg\\min_{\\hat{W}} \\| WX - \\hat{W}X \\|^2_2 \\quad \\rightarrow \\quad \\delta w = -\\frac{w - \\text{round}(w)}{[H^{-1}]_{qq}} \\cdot H^{-1}_{:,q}",
+                cells: [
+                    { val: "3", type: "optimized" }, { val: "-1", type: "optimized" }, { val: "7", type: "optimized" }, { val: "0", type: "optimized" },
+                    { val: "-5", type: "optimized" }, { val: "2", type: "optimized" }, { val: "-8", type: "optimized" }, { val: "4", type: "optimized" },
+                    { val: "1", type: "optimized" }, { val: "-3", type: "optimized" }, { val: "6", type: "optimized" }, { val: "-2", type: "optimized" }
+                ]
+            },
+            awq: {
+                title: "AWQ: Activation-Aware Weight Quantization",
+                desc: "An activation-driven strategy that protects critical information pathways from standard truncation loss.",
+                badge: "Activation Magnitude Profiling",
+                speed: "VERY FAST (Turn-key analytical scaling)",
+                speedColor: "text-purple-400 bg-purple-950 border-purple-900",
+                color: "text-purple-400",
+                mathIconColor: "text-purple-400",
+                legendText: "Salient Channels (FP16)",
+                legendClass: "bg-pink-500",
+                narrative: "<strong>AWQ</strong> stems from a crucial observation: model weights are not equally important. By profiling the model against a tiny calibration dataset, AWQ monitors activation magnitudes. It discovers that a small subset (roughly 1%) of channels handles disproportionately massive data spikes. AWQ protects these **salient channels** by keeping them in full precision (FP16) or using custom channel-wise protective scaling constants, preventing extreme outlier data cuts.",
+                latex: "S_X = \\text{diag}(\\max(|X_{\\text{calib}}|)), \\quad W_{\\text{scaled}} = W \\cdot S_X^s \\quad (s \\in [0, 1])",
+                cells: [
+                    { val: "14.2", type: "salient" }, { val: "-2", type: "normal" }, { val: "5", type: "normal" }, { val: "-9.8", type: "salient" },
+                    { val: "1", type: "normal" }, { val: "7", type: "normal" }, { val: "-4", type: "normal" }, { val: "0", type: "normal" },
+                    { val: "-3", type: "normal" }, { val: "11.5", type: "salient" }, { val: "6", type: "normal" }, { val: "1", type: "normal" }
+                ]
+            },
+            autoround: {
+                title: "AutoRound: Sign-SGD Rounding Optimization",
+                desc: "State-of-the-art post-training quantization utilizing signed gradients to jointly fine-tune rounding values.",
+                badge: "Intel Sign-SGD Joint Rounding & Clipping",
+                speed: "LIGHTWEIGHT TUNING (~200 Steps/Block)",
+                speedColor: "text-amber-400 bg-amber-950 border-amber-900",
+                color: "text-amber-400",
+                mathIconColor: "text-amber-400",
+                legendText: "Sign-SGD Optimized",
+                legendClass: "bg-purple-500",
+                narrative: "Developed by Intel, <strong>AutoRound</strong> represents a paradigm shift away from traditional rounding constraints. Traditional methods round strictly to the nearest integer, which often compromises accuracy at low widths (INT2/INT4). AutoRound introduces trainable parameters ($V$, $\\alpha$, $\\beta$) to capture **learned rounding offsets and clipping ranges**. Using block-wise output reconstruction errors and **Signed Gradient Descent (Sign-SGD)** over a quick 200-step phase, it preserves near-native reasoning capability.",
+                latex: "\\min_{V, \\alpha, \\beta} \\| Y_{\\text{layer}} - \\hat{W}(V, \\alpha, \\beta)X \\|^2_2 \\quad \\text{via} \\quad W_{\\text{upd}} = W - \\eta \\cdot \\text{sign}(\\nabla \\mathcal{L})",
+                cells: [
+                    { val: "4", type: "optimized" }, { val: "-2", type: "optimized" }, { val: "6", type: "optimized" }, { val: "-1", type: "optimized" },
+                    { val: "-6", type: "optimized" }, { val: "3", type: "optimized" }, { val: "-7", type: "optimized" }, { val: "5", type: "optimized" },
+                    { val: "2", type: "optimized" }, { val: "-4", type: "optimized" }, { val: "8", type: "optimized" }, { val: "-3", type: "optimized" }
+                ]
+            }
+        };
+
+        function setQuantMode(modeKey) {
+            currentMode = modeKey;
+            const data = quantizationConfigs[modeKey];
+
+            // Adjust navigation selection button styles
+            ['gptq', 'awq', 'autoround'].forEach(k => {
+                const btn = document.getElementById(`btn-${k}`);
+                if (k === modeKey) {
+                    btn.className = `px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 bg-slate-800 text-white border border-slate-700 shadow-md`;
+                } else {
+                    btn.className = `px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 text-slate-500 hover:text-slate-300`;
+                }
+            });
+
+            // Update header text boxes dynamically
+            document.getElementById('format-badge').innerText = data.badge;
+            document.getElementById('format-title').innerText = data.title;
+            document.getElementById('format-desc').innerText = data.desc;
+            document.getElementById('narrative-box').innerHTML = data.narrative;
+            
+            const speedBadge = document.getElementById('speed-badge');
+            speedBadge.innerText = data.speed;
+            speedBadge.className = `text-[9px] font-mono px-1.5 py-0.5 rounded border font-bold ${data.speedColor}`;
+
+            // Sync dynamic icon treatments
+            const mathIcon = document.getElementById('math-icon');
+            mathIcon.className = `fa-solid fa-square-root-variable mr-1.5 ${data.mathIconColor}`;
+
+            // Adjust active legend tags text parameters
+            const legendLabel = document.getElementById('legend-special');
+            legendLabel.innerHTML = `<span class="w-2.5 h-2.5 rounded-sm ${data.legendClass}"></span> ${data.legendText}`;
+
+            // Render text matrix blocks grid spaces dynamically
+            const gridContainer = document.getElementById('matrix-grid-container');
+            gridContainer.innerHTML = '';
+            
+            data.cells.forEach(cell => {
+                const div = document.createElement('div');
+                div.className = "p-2 bg-slate-900 border border-slate-800 rounded text-slate-400 text-[11px] q-cell";
+                div.innerText = cell.val;
+                
+                if (cell.type === 'salient') {
+                    div.className += " cell-salient";
+                } else if (cell.type === 'optimized') {
+                    div.className += " cell-optimized";
+                    // Custom border matching accents color
+                    if(modeKey === 'gptq') div.style.borderColor = 'var(--cyan-400)';
+                    if(modeKey === 'autoround') div.style.borderColor = 'var(--amber-400)';
+                }
+                gridContainer.appendChild(div);
+            });
+
+            // Trigger dynamic MathJax formula rendering pipeline transformations
+            document.getElementById('latex-box').innerText = `$$${data.latex}$$`;
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        // Initialize default app setup state variables on window ready
+        window.onload = () => {
+            setQuantMode('autoround');
+        }
+    </script>
+</body>
+</html>

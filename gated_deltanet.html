@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qwen 3.5 Gated DeltaNet Architecture Visualizer</title>
+    <style>
+        :root {
+            --bg-color: #090d16;
+            --card-bg: #111827;
+            --border: #374151;
+            --text-main: #f9fafb;
+            --text-muted: #9ca3af;
+            
+            /* Component Colors */
+            --gated-alpha: #ef4444; /* Decay Gate */
+            --gated-beta: #3b82f6;  /* Delta Update Rate */
+            --state-color: #10b981; /* Compressed Memory State */
+            --token-color: #a855f7; /* Incoming Data Token */
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1250px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            margin: 0 0 5px 0;
+            font-size: 2.3rem;
+            background: linear-gradient(to right, #3b82f6, #10b981, #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+        }
+
+        .layout-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 25px;
+            margin-bottom: 25px;
+        }
+
+        @media(min-width: 950px) {
+            .layout-grid {
+                grid-template-columns: 1fr 1.3fr;
+            }
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+
+        h2 {
+            margin-top: 0;
+            font-size: 1.3rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+
+        /* Token Time-Step Controller */
+        .timeline {
+            display: flex;
+            justify-content: space-between;
+            background: #020617;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            margin-bottom: 20px;
+        }
+
+        .time-step {
+            padding: 8px 16px;
+            background: #1f2937;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .time-step.active {
+            background: rgba(168, 85, 247, 0.2);
+            border-color: var(--token-color);
+            color: #c084fc;
+        }
+
+        /* Matrix Elements */
+        .matrix-container {
+            background: #030712;
+            border: 1px solid var(--border);
+            padding: 12px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            text-align: center;
+        }
+
+        .matrix-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        .matrix-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 4px;
+        }
+
+        .matrix-cell {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.05);
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        /* Gate values tracker */
+        .gate-pill {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        /* Macro Architecture Block Representation */
+        .hybrid-strip {
+            display: flex;
+            gap: 8px;
+            margin-top: 15px;
+        }
+
+        .block-unit {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            font-weight: bold;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            border: 1px solid var(--border);
+        }
+
+        .bg-deltanet { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border-color: #3b82f6; }
+        .bg-softmax  { background: rgba(236, 72, 153, 0.15); color: #f472b6; border-color: #ec4899; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>Qwen 3.5 Hybrid Gated DeltaNet Layer</h1>
+        <p>Interactive tracking of Linear Attention memory state updates using data-dependent Delta rules.</p>
+    </header>
+
+    <div class="card" style="margin-bottom: 20px;">
+        <h2>Sequence Processing Timeline (Recurrent Processing Loop)</h2>
+        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 12px;">
+            Linear attention runs sequentially through tokens. Click through the sequence stream to observe how the unified memory state evolves without growing in size.
+        </p>
+        <div class="timeline" id="timelineBar"></div>
+    </div>
+
+    <div class="layout-grid">
+        <div class="card">
+            <h2>1. Gate Activations & Updates</h2>
+            
+            <div style="margin-bottom: 20px;">
+                <span class="gate-pill" style="background: rgba(239,68,68,0.15); color: #f87171;">
+                    Decay Gate (α): <span id="valAlpha">0.00</span>
+                </span>
+                <span class="gate-pill" style="background: rgba(59,130,246,0.15); color: #60a5fa;">
+                    Step Learning Rate (β): <span id="valBeta">0.00</span>
+                </span>
+            </div>
+
+            <div style="font-family: monospace; font-size: 0.9rem; background: #030712; padding: 15px; border-radius: 6px; border: 1px solid var(--border); line-height: 1.6; margin-bottom: 20px;">
+                <b style="color: var(--token-color);">Current Token Input:</b> <span id="currentWordLabel">""</span>
+                <hr style="border-color: var(--border); margin: 10px 0;">
+                <b style="color: #fff;">Delta Rule Concept Equation:</b><br>
+                <span style="color: var(--state-color);">S<sub>t</sub></span> = 
+                (<span style="color: var(--gated-alpha);">α</span> × <span style="color: var(--state-color);">S<sub>t-1</sub></span>) + 
+                <span style="color: var(--gated-beta);">β</span> × [Key ⊗ (Value - <span style="color: #eab308;">Prediction</span>)]
+            </div>
+
+            <div id="executionExplanation" style="font-size: 0.95rem; line-height: 1.5; color: var(--text-muted);">
+                Select a sequence element to track variables...
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>2. The Fixed-Size Matrix Recurrent Memory State</h2>
+            <p style="font-size:0.85rem; color: var(--text-muted); margin-bottom: 15px;">
+                Instead of storing tokens inside a growing list (KV-Cache), the model maintains this single <b style="color: var(--state-color);">3×3 Memory State Matrix (S)</b>.
+            </p>
+
+            <div class="matrix-container" style="border-top: 4px solid var(--state-color); margin-bottom: 20px;">
+                <div class="matrix-title" style="color: var(--state-color);">Recurrent Memory Matrix State ($S_t$)</div>
+                <div class="matrix-grid" id="stateMatrix"></div>
+            </div>
+
+            <div style="background: rgba(255,255,255,0.02); padding: 15px; border-radius: 8px; border: 1px solid var(--border);">
+                <b style="color: #fff; font-size: 0.9rem; display: block; margin-bottom: 8px;">Why this prevents Memory Explosions:</b>
+                <p style="margin: 0; font-size: 0.85rem; line-height: 1.4; color: var(--text-muted);">
+                    Notice that as more words enter the pipeline, the matrix dimensions do not expand. This allows models like <b>Qwen 3.5</b> to process extremely long sequences smoothly, maintaining flat memory scaling without crashing hardware caches.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 40px;">
+        <h2>3. Qwen 3.5 Core Hybrid Layout Blueprint: The 3:1 Interleaved Loop</h2>
+        <p style="font-size: 0.9rem; color: var(--text-muted); margin: 0 0 15px 0;">
+            Linear attention variants (like DeltaNet) excel at processing massive sequence spans, but they suffer from slight data compression loss. To balance this out, Qwen 3.5 alternates layers using an empirically proven <b>3:1 layout pattern</b>:
+        </p>
+        
+        <div class="hybrid-strip">
+            <div class="block-unit bg-deltanet">Block 1: Gated DeltaNet<br><span style="font-size:0.7rem; font-weight:normal;">Linear Attention</span></div>
+            <div class="block-unit bg-deltanet">Block 2: Gated DeltaNet<br><span style="font-size:0.7rem; font-weight:normal;">Linear Attention</span></div>
+            <div class="block-unit bg-deltanet">Block 3: Gated DeltaNet<br><span style="font-size:0.7rem; font-weight:normal;">Linear Attention</span></div>
+            <div class="block-unit bg-softmax">Block 4: Full Gated Attention<br><span style="font-size:0.7rem; font-weight:normal;">Softmax KV Cache</span></div>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 15px; line-height: 1.4;">
+            This layout pattern repeats throughout the entire network depth. Three consecutive <b>Gated DeltaNet</b> blocks swiftly process histories at linear speed ($O(N)$ complexity), while every fourth layer invokes a <b>Full Attention</b> block to guarantee exact, loss-free data retrieval across the context window.
+        </p>
+    </div>
+</div>
+
+<script>
+    const sequence = ["System", "Prompt", "Deploys", "AI", "Agent", "Successfully"];
+    
+    // Hardcoded simulation matrices showing how Delta updates selectively edit memory rows
+    const simulationSteps = [
+        { word: "System",       alpha: 0.95, beta: 0.80, matrix: [[0.5, 0.1, 0.0], [0.1, 0.4, 0.0], [0.0, 0.0, 0.3]], log: "Initial setup token. The memory state writes fresh foundational data into the matrix fields." },
+        { word: "Prompt",       alpha: 0.90, beta: 0.75, matrix: [[0.7, 0.2, 0.1], [0.2, 0.5, 0.1], [0.0, 0.1, 0.4]], log: "New contextual instructions arrive. Step value (β) commits localized edits without altering the matrix dimensions." },
+        { word: "Deploys",      alpha: 0.95, beta: 0.60, matrix: [[0.8, 0.2, 0.3], [0.3, 0.6, 0.2], [0.1, 0.2, 0.5]], log: "Action token analyzed. The Delta rule checks current matrix weights and applies an active error correction edit." },
+        { word: "AI",           alpha: 0.60, beta: 0.90, matrix: [[0.4, 0.5, 0.6], [0.1, 0.8, 0.4], [0.2, 0.3, 0.7]], log: "High-impact token detected! Notice the Decay Gate (α) drops sharply to selectively erase older information, while Step Value (β) spikes to commit the new core subject matter." },
+        { word: "Agent",        alpha: 0.92, beta: 0.70, matrix: [[0.5, 0.6, 0.7], [0.2, 0.9, 0.5], [0.3, 0.4, 0.8]], log: "Subject association reinforced. The notebook state continues tracking patterns sequentially." },
+        { word: "Successfully", alpha: 0.95, beta: 0.50, matrix: [[0.6, 0.5, 0.7], [0.3, 0.9, 0.6], [0.4, 0.5, 0.9]], log: "Sequence terminator verified. The final fixed-size state matrix holds a dense, compressed summary of the entire context window." }
+    ];
+
+    let currentIdx = 0;
+
+    function buildTimeline() {
+        const bar = document.getElementById('timelineBar');
+        bar.innerHTML = '';
+        sequence.forEach((word, idx) => {
+            const step = document.createElement('div');
+            step.className = `time-step ${idx === currentIdx ? 'active' : ''}`;
+            step.innerText = `t=${idx}: ${word}`;
+            step.onclick = () => {
+                currentIdx = idx;
+                buildTimeline();
+                renderState();
+            };
+            bar.appendChild(step);
+        });
+    }
+
+    function renderState() {
+        const data = simulationSteps[currentIdx];
+        
+        // Render raw indicators
+        document.getElementById('valAlpha').innerText = data.alpha.toFixed(2);
+        document.getElementById('valBeta').innerText = data.beta.toFixed(2);
+        document.getElementById('currentWordLabel').innerText = `"${data.word}" (Index t=${currentIdx})`;
+        document.getElementById('executionExplanation').innerHTML = `<b>Recurrence Trace:</b><br>${data.log}`;
+
+        // Render Matrix values
+        const matrixContainer = document.getElementById('stateMatrix');
+        matrixContainer.innerHTML = '';
+        
+        data.matrix.forEach((row) => {
+            row.forEach((val) => {
+                const cell = document.createElement('div');
+                cell.className = 'matrix-cell';
+                cell.style.color = 'var(--state-color)';
+                cell.style.fontWeight = 'bold';
+                cell.innerText = val.toFixed(2);
+                matrixContainer.appendChild(cell);
+            });
+        });
+    }
+
+    // Run Initialization Pipeline
+    buildTimeline();
+    renderState();
+</script>
+
+</body>
+</html>

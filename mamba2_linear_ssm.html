@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mamba-2 Linear SSM State Compressor Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        .state-matrix-cell { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .matrix-cell-active { background: rgba(16, 185, 129, 0.25) !important; border-color: #10b981 !important; color: #34d399 !important; font-weight: bold; box-shadow: 0 0 10px rgba(16, 185, 129, 0.3); }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-emerald-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-lg">
+                    <i class="fa-solid fa-infinity text-xl text-slate-950"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">Mamba-2 Linear SSM Execution Engine</span>
+                    <span class="text-xs text-slate-400 block font-mono">Visualizing Data-Dependent Selection, State Space Recurrence, and Constant Memory Compression</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-emerald-400 font-bold">
+                Linear Time O(N) Layer
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-2xl font-black text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-circle-nodes text-emerald-400"></i> Breaking the Attention Matrix Barrier
+            </h2>
+            <p class="text-slate-400 text-sm leading-relaxed mb-6">
+                Transformers rely on global token cross-comparisons, forcing computation costs to explode quadratically ($O(N^2)$). **Mamba-2 State Space Models (SSMs)** completely bypass the attention lookup step. It reads tokens continuously, updating a fixed-size internal memory tracking container called the <strong>Hidden State Matrix ($h_t$)</strong>. This shifts context scaling into a perfectly uniform **Linear Time ($O(N)$)** pipeline execution track.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-emerald-400 mb-1">1. Selective Scanning</h3>
+                    <p class="text-slate-400 leading-relaxed">Unlike older linear models (RNNs), Mamba-2 makes its transition parameters ($A, B, C$) dynamically dependent on the incoming data. If the model reads an important keyword, it alters its selection matrix to instantly lock that information into memory.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-cyan-400 mb-1">2. Fixed Hidden State ($h_t$)</h3>
+                    <p class="text-slate-400 leading-relaxed">The holy grail of memory compression. Past context is neatly condensed into a fixed-size vector. Whether the model has seen 10 tokens or 100,000 tokens, the memory footprint remains exactly the same size, ending out-of-memory errors entirely.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-purple-400 mb-1">3. SSD Matrix Fusing</h3>
+                    <p class="text-slate-400 leading-relaxed">Mamba-2 introduces <strong>Structured State Space Duality (SSD)</strong>, which mathematically maps this recurrence to a highly optimized matrix multiplication. This allows the model to run on GPU hardware with the same parallel efficiency as a Transformer.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+            <div class="mb-4">
+                <span class="text-[10px] uppercase font-mono tracking-widest font-bold px-2 py-0.5 rounded border border-slate-700 text-slate-400 bg-slate-950">Recurrence Simulation Terminal</span>
+                <h2 class="text-2xl font-black text-white mt-1">Hidden State Evolution Monitor</h2>
+                <p class="text-slate-400 text-sm mt-0.5">Click through the continuous token inputs below to trace how the internal State Matrix compresses context dynamically on the fly.</p>
+            </div>
+
+            <div class="flex flex-wrap gap-2 mb-6">
+                <button onclick="runSsmRecurrence('token_low')" id="tok-btn-low" class="px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all">
+                    📄 Input Token: "the" (Low Importance)
+                </button>
+                <button onclick="runSsmRecurrence('token_high')" id="tok-btn-high" class="px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all">
+                    🔑 Input Token: "CRITICAL_KEY" (High Importance)
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                <div class="lg:col-span-5 bg-slate-950 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+                    <div>
+                        <span class="text-[9px] font-mono text-slate-500 uppercase block mb-3">Internal Hidden State Matrix ($h_t$) Space</span>
+                        <div class="grid grid-cols-3 gap-2 font-mono text-center bg-black p-4 rounded-xl border border-slate-900" id="matrix-cells-container">
+                            <div id="sm-cell-0" class="p-3 bg-slate-900/40 border border-slate-800 rounded text-slate-600 state-matrix-cell">0.023</div>
+                            <div id="sm-cell-1" class="p-3 bg-slate-900/40 border border-slate-800 rounded text-slate-600 state-matrix-cell">-0.114</div>
+                            <div id="sm-cell-2" class="p-3 bg-slate-900/40 border border-slate-800 rounded text-slate-600 state-matrix-cell">0.502</div>
+                            <div id="sm-cell-3" class="p-3 bg-slate-900/40 border border-slate-800 rounded text-slate-600 state-matrix-cell">-0.881</div>
+                            <div id="sm-cell-4" class="p-3 bg-slate-900/40 border border-slate-800 rounded text-slate-600 state-matrix-cell">0.314</div>
+                            <div id="sm-cell-5" class="p-3 bg-slate-900/40 border border-slate-800 rounded text-slate-600 state-matrix-cell">0.007</div>
+                        </div>
+                    </div>
+                    <div class="mt-4 p-3 bg-slate-900/50 rounded-lg border border-slate-800 text-[10px] text-slate-400 font-mono flex items-center justify-between">
+                        <span>Status: <strong id="console-status-txt" class="text-slate-400">Idle</strong></span>
+                        <span>Size Bound: <b>6x1 Float Register Block</b></span>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
+                            <h3 class="text-xs font-bold tracking-wide text-white uppercase font-mono">Algebraic Transition Console</h3>
+                            <span id="gate-badge" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-950 font-bold text-emerald-400 border border-emerald-900/40">GATE ACTIVE</span>
+                        </div>
+                        <div id="narrative-box" class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Select an input token particle choice above to spark the state space recurrence loop...
+                        </div>
+                    </div>
+
+                    <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                        <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                            <span><i class="fa-solid fa-square-root-variable text-emerald-400 mr-1.5"></i> linear_ssm_recurrence.tex</span>
+                            <span class="text-slate-500 uppercase font-bold text-[9px]">Linear Recurrence</span>
+                        </div>
+                        <div class="p-4 text-center bg-black min-h-[65px] flex items-center justify-center text-xs text-emerald-400" id="latex-box">
+                            $$h_t = A_t h_{t-1} + B_t x_t$$
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        Mamba-2 Core State Space Model Processing Map Framework
+    </footer>
+
+    <script>
+        const ssmScenarios = {
+            token_low: {
+                status: "FILTERING NOISE",
+                statusClass: "text-amber-400 font-bold",
+                narrative: "The model parses the common filler word <b>'the'</b>. The data-dependent selection gate evaluates the vector and flags it as low-importance. It scales down the gating multiplier ($A_t \\rightarrow 0.15$), allowing the state to quickly decay to **prevent noise from cluttering internal memory registers**.",
+                latex: "h_t = 0.15 \\\\cdot h_{t-1} + 0.05 \\\\cdot x_t",
+                activeCells: [0, 5],
+                cellVals: ["0.003", "-0.012", "0.051", "-0.091", "0.024", "0.001"]
+            },
+            token_high: {
+                status: "LOCKING MEMORY STATE",
+                statusClass: "text-emerald-400 font-bold",
+                narrative: "The highly specialized anchor string <b>'CRITICAL_KEY'</b> hits the system. The selection matrix shifts immediately, scaling the recurrence multiplier up ($A_t \\rightarrow 0.98$). This **locks the activation data firmly into the hidden state matrix**, preserving this context for thousands of subsequent tokens down the stream.",
+                latex: "h_t = 0.98 \\\\cdot h_{t-1} + 0.85 \\\\cdot x_t",
+                activeCells: [0, 1, 2, 3, 4, 5],
+                cellVals: ["1.942", "-2.314", "4.502", "-6.881", "3.114", "1.007"]
+            }
+        };
+
+        function runSsmRecurrence(scenarioKey) {
+            const data = ssmScenarios[scenarioKey];
+
+            // Adjust navigation control toggles active styling
+            const btnLow = document.getElementById('tok-btn-low');
+            const btnHigh = document.getElementById('tok-btn-high');
+
+            if (scenarioKey === 'token_low') {
+                btnLow.className = "px-4 py-2 bg-emerald-500 border border-emerald-400 text-slate-950 text-xs font-mono font-bold rounded-xl transition-all shadow-md";
+                btnHigh.className = "px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all text-slate-400";
+            } else {
+                btnHigh.className = "px-4 py-2 bg-emerald-500 border border-emerald-400 text-slate-950 text-xs font-mono font-bold rounded-xl transition-all shadow-md";
+                btnLow.className = "px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all text-slate-400";
+            }
+
+            // Update state summaries text layout fields
+            document.getElementById('narrative-box').innerHTML = data.narrative;
+            
+            const statusLabel = document.getElementById('console-status-txt');
+            statusLabel.innerText = data.status;
+            statusLabel.className = data.statusClass;
+
+            // Reset internal matrix register grid cells
+            for(let i = 0; i < 6; i++) {
+                const cell = document.getElementById(`sm-cell-${i}`);
+                cell.innerText = data.cellVals[i];
+                cell.className = "p-3 bg-slate-900/40 border border-slate-800 rounded text-slate-600 state-matrix-cell";
+            }
+
+            // Light up target cells active in calculation arrays structures
+            data.activeCells.forEach(idx => {
+                const cell = document.getElementById(`sm-cell-${idx}`);
+                cell.className = "p-3 border rounded state-matrix-cell matrix-cell-active";
+            });
+
+            // Update MathJax calculation blocks using double backslashes to avoid escaping bugs
+            document.getElementById('latex-box').innerText = `$$${data.latex}$$`;
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        // Boot default application configurations setups on screen parse complete
+        window.onload = () => {
+            runSsmRecurrence('token_high');
+        }
+    </script>
+</body>
+</html>

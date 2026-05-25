@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D LLM Gradient Descent Flow Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        red: { 400: '#f87171', 500: '#ef4444' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-amber-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-amber-500 to-red-500 rounded-lg">
+                    <i class="fa-solid fa-mountain text-xl text-slate-950"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">3D LLM Gradient Descent Flow Engine</span>
+                    <span class="text-xs text-slate-400 block font-mono">Visualizing Backpropagation, Error Surfaces, and Weight Updates</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-amber-400 font-bold">
+                Optimization Layer (AdamW)
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-2xl font-black text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-circle-nodes text-amber-400"></i> What is Gradient Descent in an LLM?
+            </h2>
+            <p class="text-slate-400 text-sm leading-relaxed mb-6">
+                When an LLM (like Qwen or Gemma) is initialized, its billions of parameters (weights) are completely random. It guesses words poorly. <strong>Gradient Descent</strong> is the mathematical optimization algorithm that systemically tweaks every single weight in the model to minimize its prediction errors.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-amber-400 mb-1">The Slope (The Gradient)</h3>
+                    <p class="text-slate-400 leading-relaxed">The gradient ($\nabla \mathcal{L}$) is a vector of partial derivatives. It acts as a compass, calculating the exact direction and steepness of the error curve. It tells the model which way makes the mistakes worse, so the model can step the opposite way.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-cyan-400 mb-1">The Learning Rate ($\eta$)</h3>
+                    <p class="text-slate-400 leading-relaxed">The step size. If it is too small, training takes forever. If it is too large, the model overshoots the target entirely and breaks. Modern LLMs use learning rate schedulers to start fast and slow down near the bottom.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-purple-400 mb-1">AdamW Optimizer</h3>
+                    <p class="text-slate-400 leading-relaxed">LLMs don't use vanilla gradient descent. They use <strong>AdamW</strong>, which adds <i>momentum</i> (tracking past steps to slide through flat spots) and <i>weight decay</i> (preventing weights from getting dangerously large).</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <div class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
+                <div>
+                    <h3 class="text-sm font-bold tracking-wide text-white uppercase font-mono border-b border-slate-800 pb-2 mb-4">
+                        <i class="fa-solid fa-sliders text-cyan-400 mr-1.5"></i> 1. Hyperparameter Controller
+                    </h3>
+                    <p class="text-xs text-slate-400 leading-relaxed mb-6">
+                        Adjust the learning rate step size ($\eta$) below. Use the playback buttons to observe how the parameter pointer updates its location along the mathematical error curve.
+                    </p>
+
+                    <div class="space-y-6">
+                        <div>
+                            <div class="flex justify-between text-xs font-mono text-slate-400 mb-2">
+                                <span>Learning Rate ($\eta$)</span>
+                                <span id="lr-label" class="text-amber-400 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">0.20</span>
+                            </div>
+                            <input type="range" id="slider-lr" min="0.05" max="0.95" step="0.05" value="0.20" class="w-full accent-amber-500 cursor-pointer">
+                        </div>
+
+                        <div class="flex gap-2">
+                            <button onclick="takeOptimizationStep()" class="flex-1 py-2 px-3 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-bold font-mono transition-all">
+                                <i class="fa-solid fa-angles-down mr-1"></i> Take 1 Step
+                            </button>
+                            <button onclick="resetOptimization()" class="py-2 px-4 bg-slate-950 border border-slate-800 hover:bg-slate-800 rounded-xl text-xs font-bold font-mono transition-all">
+                                <i class="fa-solid fa-rotate-left"></i> Reset
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 bg-black border border-slate-800 rounded-xl overflow-hidden h-64 relative">
+                    <div class="absolute top-2 left-2 z-10 bg-slate-950/80 border border-slate-800 px-2 py-1 rounded text-[10px] font-mono text-slate-400">
+                        Live 3D Error Surface Topology ($z = x^2 + y^2$)
+                    </div>
+                    <div id="canvas3d-container" class="w-full h-full"></div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                            <h3 class="text-sm font-bold tracking-wide text-white uppercase font-mono">Mathematical Tracking State</h3>
+                        </div>
+                        <span id="step-counter-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">Step: 0</span>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-4 mb-4 font-mono">
+                        <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 text-center">
+                            <span class="text-[9px] text-slate-500 block uppercase">Weight Matrix X ($w_x$)</span>
+                            <span id="metric-wx" class="text-sm font-bold text-white">-2.5000</span>
+                        </div>
+                        <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 text-center">
+                            <span class="text-[9px] text-slate-500 block uppercase">Weight Matrix Y ($w_y$)</span>
+                            <span id="metric-wy" class="text-sm font-bold text-white">2.5000</span>
+                        </div>
+                        <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 text-center">
+                            <span class="text-[9px] text-red-400 block uppercase">Current Loss ($\mathcal{L}$)</span>
+                            <span id="metric-loss" class="text-sm font-bold text-red-400">12.5000</span>
+                        </div>
+                    </div>
+
+                    <div id="trace-narrative" class="text-xs text-slate-300 leading-relaxed mb-4">
+                        Click <b>Take 1 Step</b> to watch the weight parameter adjust its position dynamically against the calculated error slope.
+                    </div>
+                </div>
+
+                <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                    <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                        <span><i class="fa-solid fa-square-root-variable text-amber-400 mr-1.5"></i> weight_update_equation.tex</span>
+                        <span class="text-slate-500 uppercase font-bold text-[9px]">LaTeX Engine</span>
+                    </div>
+                    <div class="p-4 text-center bg-black min-h-[60px] flex items-center justify-center text-xs" id="latex-container">
+                        $$w_{\text{new}} = w_{\text{old}} - \eta \cdot \frac{\partial \mathcal{L}}{\partial w}$$
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-lg font-bold text-white mb-2 font-mono"><i class="fa-solid fa-clock text-cyan-400 mr-1"></i> Where and When does Gradient Descent happen in LLMs?</h2>
+            <p class="text-slate-400 text-xs leading-relaxed mb-4">
+                Gradient descent is purely a **training-phase** operation. It does not run when you are generating text (inference). Here is how it fits into the training cycle:
+            </p>
+            <div class="p-4 bg-slate-950 rounded-xl border border-slate-800 font-mono text-xs text-slate-400 space-y-3">
+                <div class="flex items-start gap-2">
+                    <span class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-500 shrink-0">Phase 1</span>
+                    <div>
+                        <strong class="text-white block">The Forward Pass:</strong>
+                        The LLM reads an input context sentence (e.g., <i>"The cat sat on the..."</i>) and passes the vectors through its attention layers to guess the next token ($\hat{y} = \text{"carpet"}$).
+                    </div>
+                </div>
+                <div class="flex items-start gap-2">
+                    <span class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-500 shrink-0">Phase 2</span>
+                    <div>
+                        <strong class="text-white block">Loss Calculation:</strong>
+                        The system compares its guess against the actual document text ($y = \text{"mat"}$). It calculates its cross-entropy loss vector, expressing exactly how far off the guess was.
+                    </div>
+                </div>
+                <div class="flex items-start gap-2">
+                    <span class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-500 shrink-0">Phase 3</span>
+                    <div>
+                        <strong class="text-white block">The Backward Pass (Backpropagation):</strong>
+                        The loss value is parsed backward through the transformer layers using calculus chain rules to determine exactly how much each weight layer contributed to the incorrect guess.
+                    </div>
+                </div>
+                <div class="flex items-start gap-2 text-amber-400 bg-amber-950/20 border border-amber-900/30 p-2 rounded">
+                    <span class="px-1.5 py-0.5 bg-amber-500 border border-amber-700 rounded text-slate-950 font-bold shrink-0">Phase 4</span>
+                    <div>
+                        <strong class="text-white block">Gradient Descent Update (The Core Optimization):</strong>
+                        The optimizer collects the calculated gradients across the full training batch. It immediately subtracts these values from the model's billions of operational attention and feed-forward weight parameters, locking in a smarter configuration before processing the next batch.
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        LLM Gradient Descent Optimization Framework
+    </footer>
+
+    <script>
+        // State variables tracking optimization steps
+        let wx = -2.5;
+        let wy = 2.5;
+        let learningRate = 0.20;
+        let stepCount = 0;
+
+        // Three.js Global Setup Pointers
+        let scene, camera, renderer, ballMesh, lineGeometry;
+        let pathPoints = [];
+
+        function init3DEnvironment() {
+            const container = document.getElementById('canvas3d-container');
+            
+            // Create Scene & Camera setup
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
+            camera.position.set(6, 6, 7);
+            camera.lookAt(0, 0, 0);
+
+            // Renderer instantiation
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            container.appendChild(renderer.domElement);
+
+            // Lighting allocations
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+            dirLight.position.set(5, 10, 5);
+            scene.add(dirLight);
+
+            // Construct 3D Cost bowl Paraboloid Mesh ($z = x^2 + y^2$)
+            const segments = 30;
+            const surfaceGeo = new THREE.ParametricGeometry((u, v, target) => {
+                const x = (u - 0.5) * 6; // scale domain bounds [-3, 3]
+                const y = (v - 0.5) * 6;
+                const z = (x*x + y*y) * 0.2; // Squashed vertically for visual packaging
+                target.set(x, z, y); // Match Three.js Cartesian orientation
+            }, segments, segments);
+
+            const surfaceMat = new THREE.MeshStandardMaterial({
+                color: 0x1e293b,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.4
+            });
+            const surfaceMesh = new THREE.Mesh(surfaceGeo, surfaceMat);
+            scene.add(surfaceMesh);
+
+            // Construct the Parameter location tracking point ball
+            const ballGeo = new THREE.SphereGeometry(0.15, 32, 32);
+            const ballMat = new THREE.MeshBasicMaterial({ color: 0xfabbf24 }); // Amber-400 anchor
+            ballMesh = new THREE.Mesh(ballGeo, ballMat);
+            scene.add(ballMesh);
+
+            // Line trajectory tracking pipeline setup
+            lineGeometry = new THREE.BufferGeometry();
+            const lineMat = new THREE.LineBasicMaterial({ color: 0x22d3ee, linewidth: 2 }); // Cyan path
+            const line = new THREE.Line(lineGeometry, lineMat);
+            scene.add(line);
+
+            // Frame animation loop render execution
+            function animate() {
+                requestAnimationFrame(animate);
+                // Subtle camera orbit sway to heighten depth perception
+                const time = Date.now() * 0.0005;
+                camera.position.x = 6 * Math.cos(time * 0.2);
+                camera.position.z = 7 * Math.sin(time * 0.2);
+                camera.lookAt(0, 0, 0);
+                
+                renderer.render(scene, camera);
+            }
+            animate();
+            
+            // Sync positions on initial run
+            update3DPositions();
+        }
+
+        function update3DPositions() {
+            const scaledZ = (wx*wx + wy*wy) * 0.2;
+            ballMesh.position.set(wx, scaledZ, wy);
+
+            // Update trajectory buffer data
+            pathPoints.push(new THREE.Vector3(wx, scaledZ, wy));
+            lineGeometry.setFromPoints(pathPoints);
+        }
+
+        function updateCalculationsUI() {
+            const currentLoss = wx*wx + wy*wy;
+            const gradX = 2 * wx;
+            const gradY = 2 * wy;
+
+            document.getElementById('metric-wx').innerText = wx.toFixed(4);
+            document.getElementById('metric-wy').innerText = wy.toFixed(4);
+            document.getElementById('metric-loss').innerText = currentLoss.toFixed(4);
+            document.getElementById('metric-grad').innerText = `[${gradX.toFixed(2)}, ${gradY.toFixed(2)}]`;
+            document.getElementById('step-counter-badge').innerText = `Step: ${stepCount}`;
+
+            const narrativeNode = document.getElementById('trace-narrative');
+
+            if (stepCount === 0) {
+                narrativeNode.innerHTML = "The weights matrix parameters are completely unoptimized. The model yields high <strong>Loss (" + currentLoss.toFixed(2) + ")</strong>, holding positions far up the bowl topology walls.";
+            } else if (Math.abs(wx) < 0.05 && Math.abs(wy) < 0.05) {
+                narrativeNode.innerHTML = "🎉 <b>Convergence reached!</b> The 3D coordinate vector has smoothly settled into the base of the paraboloid bowl ($w \\approx 0.0$). Gradients are flat; optimal parameters locked.";
+            } else {
+                narrativeNode.innerHTML = "Weights subtract partial derivatives scaled by $\\eta$. You can see the parameter ball stepping down the 3D surface slope vector directly toward the base.";
+            }
+
+            // JavaScript double backslash escaping prevents math syntax display error
+            document.getElementById('latex-container').innerText = 
+                `$$\\\\vec{w}_{\\\\text{new}} = \\\\begin{bmatrix} ${wx.toFixed(2)} \\\\\\\\ ${wy.toFixed(2)} \\\\end{bmatrix} - ${learningRate.toFixed(2)} \\\\cdot \\\\begin{bmatrix} ${gradX.toFixed(2)} \\\\\\\\ ${gradY.toFixed(2)} \\\\end{bmatrix}$$`;
+
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        function takeOptimizationStep() {
+            if (Math.abs(wx) < 0.01 && Math.abs(wy) < 0.01) return;
+
+            // Compute vector gradients partial derivatives
+            wx = wx - (learningRate * (2 * wx));
+            wy = wy - (learningRate * (2 * wy));
+            stepCount++;
+
+            update3DPositions();
+            updateCalculationsUI();
+        }
+
+        function resetOptimization() {
+            wx = -2.5;
+            wy = 2.5;
+            stepCount = 0;
+            pathPoints = [];
+            
+            update3DPositions();
+            updateCalculationsUI();
+        }
+
+        document.getElementById('slider-lr').addEventListener('input', (e) => {
+            learningRate = parseFloat(e.target.value);
+            document.getElementById('lr-label').innerText = learningRate.toFixed(2);
+            updateCalculationsUI();
+        });
+
+        // Initialize WebGL context and data pipelines on runtime load
+        window.addEventListener('resize', () => {
+            const container = document.getElementById('canvas3d-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+
+        init3DEnvironment();
+        updateCalculationsUI();
+    </script>
+</body>
+</html>

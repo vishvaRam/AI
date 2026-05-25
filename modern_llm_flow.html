@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern LLM Processing Flow Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        .flow-node { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .active-forward-glow { border-color: #22d3ee !important; shadow: 0 0 15px rgba(34,211,238,0.3); background: rgba(34,211,238,0.05) !important; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-cyan-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-cyan-500 via-purple-500 to-emerald-500 rounded-lg">
+                    <i class="fa-solid fa-microchip text-xl text-slate-950"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">Modern LLM In-Flight Execution Engine</span>
+                    <span class="text-xs text-slate-400 block font-mono">Tracing Ingestion, Attention, FFN, and Generation Layers inside Qwen & Gemma Blocks</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-cyan-400 font-bold">
+                Decoder-Only Pipeline
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+            <div class="mb-4">
+                <span class="text-[10px] uppercase font-mono tracking-widest font-bold px-2 py-0.5 rounded border border-slate-700 text-slate-400 bg-slate-950">In-Flight Execution Chart</span>
+                <h2 class="text-2xl font-black text-white mt-1">Token Lifetime Execution Flow</h2>
+                <p class="text-slate-400 text-sm mt-0.5">Click through the structural processing segments below to isolate where vectors transform inside the deep neural layers.</p>
+            </div>
+
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-6 overflow-x-auto custom-scrollbar">
+                <div class="min-w-[950px] py-2 flex items-center justify-around font-mono text-xs">
+                    
+                    <div id="graph-node-embed" class="p-4 bg-slate-900 border border-slate-800 rounded-xl text-center w-40 flow-node">
+                        <span class="block text-cyan-400 font-bold mb-1"><i class="fa-solid fa-font mr-1"></i> Tokenization</span>
+                        <div class="p-2 bg-black rounded border border-slate-800 text-[10px] text-slate-400">
+                            String $\rightarrow$ Dense IDs<br>$X = \text{Embed}(t) + \text{RoPE}$
+                        </div>
+                    </div>
+
+                    <div class="text-slate-700 text-base"><i class="fa-solid fa-angle-right"></i></div>
+
+                    <div id="graph-node-attn" class="p-4 bg-slate-900 border border-slate-800 rounded-xl text-center w-48 flow-node">
+                        <span class="block text-purple-400 font-bold mb-1"><i class="fa-solid fa-eye mr-1"></i> Self-Attention</span>
+                        <div class="p-2 bg-black rounded border border-slate-800 text-[10px] text-slate-400">
+                            Grouped-Query (GQA)<br>$\text{Softmax}(\frac{QK^T}{\sqrt{d_k}})V$
+                        </div>
+                    </div>
+
+                    <div class="text-slate-700 text-base"><i class="fa-solid fa-angle-right"></i></div>
+
+                    <div id="graph-node-ffn" class="p-4 bg-slate-900 border border-slate-800 rounded-xl text-center w-44 flow-node">
+                        <span class="block text-emerald-400 font-bold mb-1"><i class="fa-solid fa-layer-group mr-1"></i> Feed-Forward</span>
+                        <div class="p-2 bg-black rounded border border-slate-800 text-[10px] text-slate-400">
+                            SwiGLU Gated Multiplier<br>$W_2(\text{Swish}(XW_1) \cdot XW_3)$
+                        </div>
+                    </div>
+
+                    <div class="text-slate-700 text-base"><i class="fa-solid fa-angle-right"></i></div>
+
+                    <div id="graph-node-norm" class="p-4 bg-slate-900 border border-slate-800 rounded-xl text-center w-40 flow-node">
+                        <span class="block text-amber-400 font-bold mb-1"><i class="fa-solid fa-scale-balanced mr-1"></i> Normalization</span>
+                        <div class="p-2 bg-black rounded border border-slate-800 text-[10px] text-slate-400">
+                            RMSNorm Tuning Step<br>$\bar{x} = \frac{x}{\sqrt{\frac{1}{n}\sum x_i^2}}$
+                        </div>
+                    </div>
+
+                    <div class="text-slate-700 text-base"><i class="fa-solid fa-angle-right"></i></div>
+
+                    <div id="graph-node-head" class="p-4 bg-slate-900 border border-slate-800 rounded-xl text-center w-36 flow-node">
+                        <span class="block text-rose-400 font-bold mb-1"><i class="fa-solid fa-terminal mr-1"></i> Prediction</span>
+                        <div class="p-2 bg-black rounded border border-slate-800 text-[10px] text-slate-400">
+                            LM Logits Head<br>$\text{Softmax}(X \cdot W_{\text{unembed}})$
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <div class="lg:col-span-5 flex flex-col gap-3" id="pipeline-buttons-stack">
+                </div>
+
+            <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" id="console-pulse"></span>
+                            <h3 class="text-sm font-bold tracking-wide text-white uppercase font-mono">Algebraic Step Output Console</h3>
+                        </div>
+                        <span id="step-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">PIPELINE LOADED</span>
+                    </div>
+
+                    <div id="step-narrative" class="text-sm text-slate-300 leading-relaxed mb-4">
+                        Select a pipeline execution parameter token node from the index matrix to analyze internal operational features.
+                    </div>
+                </div>
+
+                <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                    <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                        <span><i class="fa-solid fa-square-root-variable text-cyan-400 mr-1.5"></i> continuous_layer_equation.tex</span>
+                        <span class="text-slate-500 uppercase font-bold text-[9px]">LaTeX Enabled</span>
+                    </div>
+                    <div class="p-4 text-center bg-black min-h-[65px] flex items-center justify-center text-xs text-cyan-400" id="latex-display-container">
+                        $$\text{Awaiting Matrix Execution}$$
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const llmFlowPipeline = [
+            {
+                title: "1. Tokenization & Vector Projection",
+                summary: "Raw user input strings are turned into continuous feature tensors.",
+                narrative: "When a prompt reaches a model like Qwen or Gemma, string variables are split into discrete sub-word IDs via a Byte-Pair Encoding (BPE) dictionary. These numerical markers pull multi-dimensional parameters from a lookup table and receive structural order data from a <strong>Rotary Positional Embedding (RoPE)</strong> matrix, creating the initial hidden state vector.",
+                latex: "X_0 = \\text{Embedding}(Tokens) + \\text{RoPE}",
+                badge: "INPUT LAYER EMBEDDING GATE",
+                nodeId: "graph-node-embed",
+                color: "bg-cyan-400"
+            },
+            {
+                title: "2. Grouped-Query Attention Routing",
+                summary: "Tokens exchange spatial contextual context matrices.",
+                narrative: "The input tensor encounters the <strong>Self-Attention Layer</strong>. To minimize VRAM overhead, modern models employ <b>Grouped-Query Attention (GQA)</b>, where multiple Query heads map to shared Key and Value parameter tracks. This layer calculates cosine similarity scores, determining how much focus each token should assign to surrounding context in the sentence.",
+                latex: "\\text{Attention}(Q, K, V) = \\text{Softmax}\\left(\\frac{Q K^T}{\\sqrt{d_k}}\\right) V",
+                badge: "TRANSFORMER LAYER: MULTI-HEAD CORE",
+                nodeId: "graph-node-attn",
+                color: "bg-purple-400"
+            },
+            {
+                title: "3. SwiGLU Feed-Forward Injection",
+                summary: "The model runs non-linear feature extractions via dual-gated pipelines.",
+                narrative: "After context weights merge, the intermediate matrices pass into the <strong>Feed-Forward Network (FFN)</strong> layer. Rather than traditional configurations, modern models implement a <b>SwiGLU gated multiplier</b> pipeline: splitting the signal across two parallel projection tracks ($W_1$ and $W_3$). One track filters through a non-linear <i>Swish</i> gate before multiplying back into the second track, eliminating flatlining neurons.",
+                latex: "\\text{SwiGLU}(X) = \\left( XW_1 \\cdot \\frac{1}{1 + e^{-XW_1}} \\right) \\times (XW_3)",
+                badge: "GLU GATED NON-LINEAR MULTIPLIER",
+                nodeId: "graph-node-ffn",
+                color: "bg-emerald-400"
+            },
+            {
+                title: "4. Root Mean Square Normalization",
+                summary: "Layer data variance is rescaled to ensure stable processing gradients.",
+                narrative: "To prevent numeric errors across deep hidden layer networks, values pass through <strong>RMSNorm (Root Mean Square Normalization)</strong> layers. Unlike standard LayerNorm, RMSNorm drops mean calculation steps entirely and scales hidden states based purely on variance, dropping computational costs by roughly 10% to 50%.",
+                latex: "\\text{RMSNorm}(x) = \\frac{x}{\\sqrt{\\frac{1}{n} \\sum_{i=1}^n x_i^2 + \\epsilon}} \\odot \\gamma",
+                badge: "RMSNORM STABILIZATION SYSTEM",
+                nodeId: "graph-node-norm",
+                color: "bg-amber-400"
+            },
+            {
+                title: "5. Logit Projections & Generation",
+                summary: "Hidden states are un-embedded back into readable string tokens.",
+                narrative: "After passing through dozens of identical attention and FFN layer blocks, the hidden state vector reaches the <strong>Language Model Head (LM Head)</strong>. The vector is multiplied by the original embedding matrix transposition ($W_{\\text{unembed}}$). This maps internal abstract features to language dictionary coordinates, which run through a final Softmax layer to predict the highest-probability next token.",
+                latex: "P(\\text{Token} | Context) = \\text{Softmax}(X_{\\text{final}} \\cdot W_{\\text{unembed}})",
+                badge: "UN-EMBEDDING DECODER LAYER OUTPUT",
+                nodeId: "graph-node-head",
+                color: "bg-rose-400"
+            }
+        ];
+
+        function buildPipelineDashboard() {
+            const container = document.getElementById('pipeline-buttons-stack');
+            container.innerHTML = '';
+
+            llmFlowPipeline.forEach((step, idx) => {
+                const btn = document.createElement('button');
+                btn.id = `llm-flow-node-btn-${idx}`;
+                btn.onclick = () => runPipelineFrameTrace(idx);
+                btn.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+                
+                btn.innerHTML = `
+                    <div class="flex items-center justify-between w-full">
+                        <span class="font-bold text-xs text-white tracking-wide uppercase font-mono">${step.title}</span>
+                        <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
+                    </div>
+                    <p class="text-xs leading-normal font-medium text-slate-400">${step.summary}</p>
+                `;
+                container.appendChild(btn);
+            });
+        }
+
+        function runPipelineFrameTrace(stepIdx) {
+            const currentData = llmFlowPipeline[stepIdx];
+
+            llmFlowPipeline.forEach((_, idx) => {
+                const buttonElement = document.getElementById(`llm-flow-node-btn-${idx}`);
+                if(buttonElement) buttonElement.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+            });
+
+            const activeBtn = document.getElementById(`llm-flow-node-btn-${stepIdx}`);
+            if(activeBtn) {
+                activeBtn.className = `w-full text-left p-4 rounded-xl bg-slate-800/80 border-2 ${currentData.nodeId.replace('graph-node-', 'border-')} transition-all duration-200 flex flex-col gap-1`;
+            }
+
+            // Sync structural text parameters inside terminal box window
+            document.getElementById('step-badge').innerText = currentData.badge;
+            document.getElementById('step-narrative').innerHTML = currentData.narrative;
+            document.getElementById('latex-display-container').innerText = `$$${currentData.latex}$$`;
+
+            // Trigger typesetting refresh across MathJax handlers
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+
+            // Normalize top visual graph block elements
+            const visualIds = ['graph-node-embed', 'graph-node-attn', 'graph-node-ffn', 'graph-node-norm', 'graph-node-head'];
+            visualIds.forEach(id => {
+                const block = document.getElementById(id);
+                if(block) block.className = "p-4 bg-slate-900 border border-slate-800 rounded-xl text-center w-40 flow-node";
+            });
+
+            // Isolate active block node item
+            const currentGraphicBlock = document.getElementById(currentData.nodeId);
+            if(currentGraphicBlock) {
+                currentGraphicBlock.className = `p-4 rounded-xl text-center w-40 flow-node border-2 active-forward-glow`;
+            }
+
+            // Swap out pulse badge indicator styling
+            const pulseIndicator = document.getElementById('console-pulse');
+            pulseIndicator.className = `w-2.5 h-2.5 rounded-full ${currentData.color} animate-pulse`;
+        }
+
+        window.onload = () => {
+            buildPipelineDashboard();
+            runPipelineFrameTrace(0);
+        }
+    </script>
+</body>
+</html>

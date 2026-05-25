@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural Network In-Depth Flow Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' },
+                        indigo: { 400: '#818cf8', 500: '#6366f1' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        .layer-node { transition: all 0.3s ease; }
+        .active-forward { stroke: #22d3ee; stroke-width: 3px; filter: drop-shadow(0 0 8px rgba(34,211,238,0.6)); }
+        .active-backward { stroke: #fbbf24; stroke-width: 3px; filter: drop-shadow(0 0 8px rgba(251,191,36,0.6)); }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-cyan-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-cyan-500 via-indigo-500 to-amber-500 rounded-lg">
+                    <i class="fa-solid fa-network-wired text-xl text-slate-950"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">Neural Network Step-by-Step Flow Engine</span>
+                    <span class="text-xs text-slate-400 block font-mono">Visualizing Linear Aggregation, Non-Linear Activation, Loss, and Backpropagation</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-cyan-400 font-bold">
+                ACID-Compliant Rendering
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+            <div class="mb-4">
+                <span class="text-[10px] uppercase font-mono tracking-widest font-bold px-2 py-0.5 rounded border border-slate-700 text-slate-400 bg-slate-950">Network Schematic Topology</span>
+                <h2 class="text-2xl font-black text-white mt-1">Mathematical Processing Path</h2>
+                <p class="text-slate-400 text-sm mt-0.5">Select steps from the pipeline below to highlight the architectural direction of tensors moving through the algorithm layer blocks.</p>
+            </div>
+
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-6 overflow-x-auto custom-scrollbar">
+                <div class="min-w-[900px] py-2 flex items-center justify-around font-mono text-xs">
+                    
+                    <div id="vis-input" class="p-4 bg-slate-900 border border-slate-700 rounded-xl text-center w-36 layer-node">
+                        <span class="block text-cyan-400 font-bold mb-1"><i class="fa-solid fa-arrow-right-to-bracket mr-1"></i> Inputs</span>
+                        <div class="p-2 bg-black rounded border border-slate-800 text-[11px] text-slate-400">
+                            Vector: $X_i$<br>Features Space
+                        </div>
+                    </div>
+
+                    <div class="text-slate-600 text-xl"><i class="fa-solid fa-right-long"></i></div>
+
+                    <div id="vis-dot" class="p-4 bg-slate-900 border border-slate-700 rounded-xl text-center w-48 layer-node">
+                        <span class="block text-indigo-400 font-bold mb-1">Linear Synthesis</span>
+                        <div class="p-2 bg-black rounded border border-slate-800 text-[11px] text-slate-400">
+                            Equation: $z = XW + b$<br>Weights $\times$ Inputs + Bias
+                        </div>
+                    </div>
+
+                    <div class="text-slate-600 text-xl"><i class="fa-solid fa-right-long"></i></div>
+
+                    <div id="vis-activation" class="p-4 bg-slate-900 border border-slate-700 rounded-xl text-center w-44 layer-node">
+                        <span class="block text-purple-400 font-bold mb-1">Activation Layer</span>
+                        <div class="p-2 bg-black rounded border border-slate-800 text-[11px] text-slate-400">
+                            Non-Linear Transformation<br>$\sigma(z) \rightarrow$ ReLU / Sigmoid
+                        </div>
+                    </div>
+
+                    <div class="text-slate-600 text-xl"><i class="fa-solid fa-right-long"></i></div>
+
+                    <div id="vis-loss" class="p-4 bg-slate-900 border border-slate-700 rounded-xl text-center w-40 layer-node">
+                        <span class="block text-emerald-400 font-bold mb-1">Loss Evaluation</span>
+                        <div class="p-2 bg-black rounded border border-slate-800 text-[11px] text-slate-400">
+                            Error Deviation<br>Cost function: $\mathcal{L}(\hat{y}, y)$
+                        </div>
+                    </div>
+
+                    <div id="vis-backprop-arrow" class="text-slate-600 text-xl"><i class="fa-solid fa-right-long"></i></div>
+
+                    <div id="vis-backprop" class="p-4 bg-slate-900 border border-slate-700 rounded-xl text-center w-40 layer-node">
+                        <span class="block text-amber-400 font-bold mb-1"><i class="fa-solid fa-rotate-left mr-1"></i> Optimization</span>
+                        <div class="p-2 bg-black rounded border border-slate-800 text-[11px] text-slate-400">
+                            Gradients Update Loop<br>$\Delta W = -\eta \frac{\partial \mathcal{L}}{\partial W}$
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <div class="lg:col-span-5 flex flex-col gap-3" id="pipeline-controls">
+                </div>
+
+            <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                        <div class="flex items-center gap-2">
+                            <div class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" id="console-pulse"></div>
+                            <h3 class="text-sm font-bold tracking-wide text-white uppercase font-mono">Calculations Matrix Console</h3>
+                        </div>
+                        <span id="step-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">STAGE INDEPENDENT</span>
+                    </div>
+
+                    <div id="step-narrative" class="text-sm text-slate-300 leading-relaxed mb-4">
+                        Select a processing coordinate from the side panel track to execute live equation calculations...
+                    </div>
+                </div>
+
+                <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                    <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[11px] text-slate-400 font-mono">
+                        <span><i class="fa-brands fa-python text-cyan-400 mr-1.5"></i> neural_network_runtime.py</span>
+                        <span class="text-[9px] uppercase tracking-wider bg-slate-900 px-1.5 py-0.5 rounded text-cyan-400 font-bold" id="code-badge">PyTorch Numpy equivalent</span>
+                    </div>
+                    <pre class="p-4 text-xs font-mono text-cyan-300 overflow-x-auto h-40 custom-scrollbar bg-black" id="code-display-box"><code># Selection data streams</code></pre>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        Neural Network Mathematical Propagation Pipeline Framework Layer Map
+    </footer>
+
+    <script>
+        const networkPipeline = [
+            {
+                title: "1. Feature Tensor Ingestion",
+                summary: "Input vectors are structured and assigned feature weights.",
+                narrative: "The lifecycle begins as an input matrix array $X$ reaches the network layer. Every input variable is bound to a distinct data track. These elements act as pure data signals and are passed unchanged directly into the weight combination parameters.",
+                code: "import numpy as np\n\n# Input features array definition\nX = np.array([[0.75, 0.25]])\nprint(f\"Ingesting input feature dimensions shape: {X.shape}\")",
+                badge: "INPUT LAYER DATA STREAM",
+                highlightId: "vis-input",
+                mode: "forward"
+            },
+            {
+                title: "2. Linear Aggregation Function",
+                summary: "Inputs are scaled via matrix weights ($W$) and baseline biases ($b$).",
+                narrative: "Downstream neurons execute a high-speed matrix dot product calculation. The inputs vector is multiplied by a configured <strong>Weights Matrix ($W$)</strong>, scaling individual parameters based on calculated importance. A baseline tuning variable called the <strong>Bias vector ($b$)</strong> is added to shift the outcome: $z = X \cdot W + b$.",
+                code: "# Weight matrix allocation and bias offset configurations\nW = np.array([[0.45, -0.12, 0.88, 0.21],\n              [0.32, 0.55, -0.11, 0.74]])\nb = np.array([0.1, -0.2, 0.05, 0.15])\n\n# Compute dot product sum parameter\nz = np.dot(X, W) + b",
+                badge: "LINEAR AGGREGATION: MATRIX PRODUCT",
+                highlightId: "vis-dot",
+                mode: "forward"
+            },
+            {
+                title: "3. Non-Linear Activation Layer",
+                summary: "Equations pass through functions to map complex non-linear patterns.",
+                narrative: "The output value $z$ runs through a specialized mathematical filter called an <strong>Activation Function</strong> ($\sigma$). Without this layer, the system would remain a giant linear equation unable to approximate complex patterns. Common options include **ReLU** ($f(x)=\max(0, x)$) or **Sigmoid** ($f(x)=\frac{1}{1 + e^{-x}}$).",
+                code: "# Apply non-linear Rectified Linear Unit (ReLU) mapping function\ndef relu(matrix_z):\n    return np.maximum(0, matrix_z)\n\nactivations = relu(z)\nprint(f\"Neurons activated output state vector: {activations}\")",
+                badge: "NON-LINEAR ACTIVATION FUNCTION",
+                highlightId: "vis-activation",
+                mode: "forward"
+            },
+            {
+                title: "4. Loss Optimization Metrics",
+                summary: "Predictions are evaluated against targets to determine the exact error gap.",
+                narrative: "Once the forward pass reaches the output layer, it yields a prediction value $\hat{y}$. This value is compared against the ground-truth target $y$ inside a **Loss Function** ($\mathcal{L}$). This calculates the exact distance between the prediction and reality, expressing the error as a single optimization vector.",
+                code: "# Compute Mean Squared Error tracking loss metrics\ny_true = np.array([[1.0]])\ny_pred = activations[:, 0:1] # Sample node output match\n\nloss = 0.5 * np.sum(np.square(y_pred - y_true))\nprint(f\"Calculated training network loss target: {loss}\")",
+                badge: "LOSS FUNCTION CRITERION COST",
+                highlightId: "vis-loss",
+                mode: "forward"
+            },
+            {
+                title: "5. Backpropagation & Correction",
+                summary: "Gradients update variables using Calculus chain rules.",
+                narrative: "To optimize the system, the error value is routed backward through the layer weights. Using calculus **Chain Rules**, the engine calculates the partial derivative of the loss with respect to each weight ($\frac{\partial \mathcal{L}}{\partial W}$). It then runs **Gradient Descent** to update variables against errors, tuning the network so it performs better next time.",
+                code: "# Compute derivative changes using calculus chain rules loops\nd_loss_d_pred = y_pred - y_true\nd_pred_d_z = np.where(z[:, 0:1] > 0, 1, 0) # ReLU derivative slope\n\n# Perform parameters updates using gradient scale updates rate\ngradient_w = np.dot(X.T, d_loss_d_pred * d_pred_d_z)\nW[:, 0:1] -= 0.01 * gradient_w # Learning Rate factor update",
+                badge: "BACKWARD PASS: GRADIENT DESCENT LOOP",
+                highlightId: "vis-backprop",
+                mode: "backward"
+            }
+        ];
+
+        function renderPipelineControls() {
+            const container = document.getElementById('pipeline-controls');
+            container.innerHTML = '';
+
+            networkPipeline.forEach((step, idx) => {
+                const btn = document.createElement('button');
+                btn.id = `pipeline-step-node-${idx}`;
+                btn.onclick = () => activatePipelineFrame(idx);
+                btn.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+                
+                btn.innerHTML = `
+                    <div class="flex items-center justify-between w-full">
+                        <span class="font-bold text-xs text-white tracking-wide uppercase font-mono">${step.title}</span>
+                        <span class="text-[9px] font-mono tracking-wider font-semibold opacity-60 px-2 py-0.5 rounded bg-slate-950">${step.mode.toUpperCase()}</span>
+                    </div>
+                    <p class="text-xs leading-normal font-medium text-slate-400">${step.summary}</p>
+                `;
+                container.appendChild(btn);
+            });
+        }
+
+        function activatePipelineFrame(stepIdx) {
+            const currentData = networkPipeline[stepIdx];
+
+            // Reset selection style markers on side list panels
+            networkPipeline.forEach((_, idx) => {
+                const node = document.getElementById(`pipeline-step-node-${idx}`);
+                if(node) node.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+            });
+
+            const activeBtn = document.getElementById(`pipeline-step-node-${stepIdx}`);
+            if(activeBtn) {
+                const accentColorClass = currentData.mode === 'forward' ? 'border-cyan-400 text-cyan-400' : 'border-amber-400 text-amber-400';
+                activeBtn.className = `w-full text-left p-4 rounded-xl bg-slate-800/80 border ${accentColorClass} transition-all duration-200 flex flex-col gap-1`;
+            }
+
+            // Sync structural documentation texts fields inside diagnostic trace windows
+            document.getElementById('step-badge').innerText = currentData.badge;
+            document.getElementById('step-narrative').innerHTML = currentData.narrative;
+            document.getElementById('code-display-box').innerText = currentData.code;
+
+            // Trigger dynamic MathJax equations rendering passes
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+
+            // Sync dynamic border classes inside top visual model schematic container
+            const allNodes = ['vis-input', 'vis-dot', 'vis-activation', 'vis-loss', 'vis-backprop'];
+            allNodes.forEach(id => {
+                const nodeEl = document.getElementById(id);
+                if(nodeEl) nodeEl.className = "p-4 bg-slate-900 border border-slate-700 rounded-xl text-center layer-node w-full max-w-[180px]";
+            });
+
+            // Handle directional connecting layout arrows colors configurations matching step indices definitions
+            const backpropArrow = document.getElementById('vis-backprop-arrow');
+            if(currentData.mode === 'backward') {
+                backpropArrow.style.color = 'var(--amber-400)';
+            } else {
+                backpropArrow.style.color = 'var(--border)';
+            }
+
+            const targetGraphicNode = document.getElementById(currentData.highlightId);
+            if(targetGraphicNode) {
+                const dynamicGlowClass = currentData.mode === 'forward' ? 'border-2 border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.35)] bg-cyan-950/20' : 'border-2 border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.35)] bg-amber-950/20';
+                targetGraphicNode.className = `p-4 bg-slate-900 rounded-xl text-center layer-node w-full max-w-[180px] ${dynamicGlowClass}`;
+            }
+
+            // Toggle color treatment classes on console pulse indicator icon
+            const pulseNode = document.getElementById('console-pulse');
+            pulseNode.className = currentData.mode === 'forward' ? 'w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse' : 'w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse';
+            
+            const codeBadgeNode = document.getElementById('code-badge');
+            codeBadgeNode.className = currentData.mode === 'forward' ? 'text-[9px] uppercase tracking-wider bg-slate-900 px-1.5 py-0.5 rounded text-cyan-400 font-bold' : 'text-[9px] uppercase tracking-wider bg-slate-900 px-1.5 py-0.5 rounded text-amber-400 font-bold';
+        }
+
+        // Initialize application setups loops on page render
+        window.onload = () => {
+            renderPipelineControls();
+            activatePipelineFrame(0);
+        }
+    </script>
+</body>
+</html>

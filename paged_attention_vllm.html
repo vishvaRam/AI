@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PagedAttention Architecture Deep Dive (vLLM)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        .mem-chunk { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .block-assigned { border-color: #22d3ee !important; background: rgba(34, 211, 238, 0.15) !important; color: #22d3ee !important; font-weight: bold; box-shadow: 0 0 12px rgba(34, 211, 238, 0.2); }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-cyan-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-cyan-500 to-purple-600 rounded-lg">
+                    <i class="fa-solid fa-memory text-xl text-slate-950"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">vLLM PagedAttention Memory Architecture</span>
+                    <span class="text-xs text-slate-400 block font-mono">Visualizing Virtual Block Translation, Non-Contiguous Page Tables, and KV-Cache Optimization</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-cyan-400 font-bold">
+                Zero Memory Waste
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-2xl font-black text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-cubes text-cyan-400"></i> Overcoming KV-Cache Memory Fragmentation
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm mt-4">
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-cyan-400 mb-1">Logical Tokens Block</h3>
+                    <p class="text-slate-400 leading-relaxed">As an LLM streams text tokens sequentially, their calculated Key-Value vectors form continuous logical tracking strings. The model groups these into virtual logical blocks of fixed sizes (e.g., 4 tokens per block).</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-purple-400 mb-1">The Block Page Table</h3>
+                    <p class="text-slate-400 leading-relaxed">Acts exactly like an operating system's MMU. The Page Table acts as a translational map layer, linking continuous, sequential logical token keys to scattered, non-contiguous spots inside physical VRAM.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-emerald-400 mb-1">Physical Cache Pool</h3>
+                    <p class="text-slate-400 leading-relaxed">By chopping VRAM into a uniform grid of physical block addresses, vLLM appends newly generated tokens to any available page, eliminating up to 96% of standard memory allocation waste.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+            <div class="mb-4">
+                <span class="text-[10px] uppercase font-mono tracking-widest font-bold px-2 py-0.5 rounded border border-slate-700 text-slate-400 bg-slate-950">Memory Pool Simulation Terminal</span>
+                <h2 class="text-2xl font-black text-white mt-1">Virtual to Physical Memory Mapping</h2>
+                <p class="text-slate-400 text-sm mt-0.5">Click different generation runtime steps below to watch the Page Table translate logical token blocks into non-contiguous physical addresses.</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                <div class="lg:col-span-5 flex flex-col gap-3" id="stepper-buttons-container">
+                    </div>
+
+                <div class="lg:col-span-7 bg-slate-950 border border-slate-800 rounded-xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                            <span class="text-xs font-bold tracking-wide text-white uppercase font-mono">Physical GPU VRAM Grid</span>
+                            <span id="step-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">INIT</span>
+                        </div>
+
+                        <div class="mb-6">
+                            <span class="text-[9px] font-mono text-slate-500 uppercase block mb-2">Segmented Physical Cache Space (Allocated Blocks Pool)</span>
+                            <div class="grid grid-cols-4 gap-2 font-mono text-xs text-center" id="vram-blocks-grid">
+                                <div id="vram-blk-0" class="p-3 bg-slate-900/40 border border-slate-800 rounded text-slate-600 mem-chunk">Phys Block 0</div>
+                                <div id="vram-blk-1" class="p-3 bg-slate-900/40 border border-slate-800 rounded text-slate-600 mem-chunk">Phys Block 1</div>
+                                <div id="vram-blk-2" class="p-3 bg-slate-900/40 border border-slate-800 rounded text-slate-600 mem-chunk">Phys Block 2</div>
+                                <div id="vram-blk-3" class="p-3 bg-slate-900/40 border border-slate-800 rounded text-slate-600 mem-chunk">Phys Block 3</div>
+                            </div>
+                        </div>
+
+                        <div id="narrative-box" class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Select an operational pipeline index block from the controller layout to start tracking execution states...
+                        </div>
+                    </div>
+
+                    <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                        <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                            <span><i class="fa-solid fa-square-root-variable text-cyan-400 mr-1.5"></i> lookup_index_mapping.tex</span>
+                            <span class="text-slate-500 uppercase font-bold text-[9px]">Virtual Mapping</span>
+                        </div>
+                        <div class="p-4 text-center bg-black min-h-[60px] flex items-center justify-center text-xs text-cyan-400" id="latex-box">
+                            $$\text{Mapping Equation}$$
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-lg font-bold text-white mb-3 font-mono"><i class="fa-solid fa-scale-balanced text-purple-400 mr-1.5"></i> Traditional Allocation vs. vLLM PagedAttention</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                    <span class="text-red-400 font-bold block"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Static Allocation (HuggingFace Transformers Baseline)</span>
+                    <p class="text-slate-400 leading-relaxed">
+                        Pre-allocates contiguous tracks matching maximum context parameters ($N_{\text{max}} = 2048$). If an extraction payload terminates early at index 120, the remaining contiguous space from indices 121 to 2048 remains completely locked, unsharable, and entirely wasted.
+                    </p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                    <span class="text-emerald-400 font-bold block"><i class="fa-solid fa-circle-check mr-1"></i> PagedAttention Strategy (vLLM Engine Architecture)</span>
+                    <p class="text-slate-400 leading-relaxed">
+                        Memory is allocated piece-by-piece using small 16-token page chunks. If a generation path needs additional slots, vLLM dynamically maps a new, unallocated block address from anywhere in the physical grid pool. This dynamic approach **reduces memory overhead by up to 96%**, allowing servers to scale up active query batch loads safely.
+                    </p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        vLLM Core PagedAttention Engine Tracking Architecture Framework Map
+    </footer>
+
+    <script>
+        const pagedPipeline = [
+            {
+                title: "1. Prompt Token Initialization",
+                summary: "Incoming text strings generate the initial logical KV block.",
+                narrative: "An incoming request arrives. The initial text prompt produces Key-Value vectors for the first set of tokens. vLLM assigns them to <b>Logical Block 0</b>, mapping this structure to an unallocated physical page (<b>Phys Block 1</b>) inside the memory grid pool.",
+                latex: "\\text{PageTable}(\\text{Logical Block } 0) = \\text{Physical Block } 1",
+                badge: "LOGICAL CACHE MATRICES AT ALLOCATION",
+                activePhys: [1]
+            },
+            {
+                title: "2. Token Autoregressive Append Loop",
+                summary: "Generated words expand the logical block capacity smoothly.",
+                narrative: "The model runs text generation loops. Newly generated token vectors are appended to the available slots within the current active block (<b>Logical Block 0 $\rightarrow$ Phys Block 1</b>). Because pages utilize fixed-size configurations, allocation parameters remain safely locked inside this page boundary.",
+                latex: "\\text{KV-Cache Address} = \\text{Physical Block } 1 + (\\text{Token Index} \\times \\text{Stride})",
+                badge: "INTRA-PAGE CHUNK RECORD APPEND",
+                activePhys: [1]
+            },
+            {
+                title: "3. Page Boundary Overflow Event",
+                summary: "When a block hits capacity, the table maps a non-contiguous page.",
+                narrative: "When <b>Logical Block 0</b> hits capacity, vLLM catches the overflow event. The system references unallocated slots in the VRAM pool, locates a non-contiguous block (<b>Phys Block 3</b>), and registers it inside the Page Table to hold the next sequence segment.",
+                latex: "\\text{PageTable}(\\text{Logical Block } 1) = \\text{Physical Block } 3",
+                badge: "DYNAMIC TABLE OVERFLOW TRANSACTION",
+                activePhys: [1, 3]
+            },
+            {
+                title: "4. Unified Attention Context Read",
+                summary: "The attention layer queries non-contiguous blocks seamlessly.",
+                narrative: "When computing self-attention, the kernel maps the virtual token stream through the Page Table, fetching the scattered blocks (<b>Phys Block 1 and Phys Block 3</b>) in parallel. This enables loss-free contextual retrieval while keeping hardware memory scaling optimal.",
+                latex: "O_i = \\sum_{j} \\text{Softmax}\\left(\\frac{Q_i \\cdot K^T(\\text{PageTable}(j))}{\\sqrt{d_k}}\\right) V(\\text{PageTable}(j))",
+                badge: "SCATTER-GATHER VECTOR ATTENTION PASS",
+                activePhys: [1, 3]
+            }
+        ];
+
+        function buildStepper() {
+            const container = document.getElementById('stepper-buttons-container');
+            container.innerHTML = '';
+
+            pagedPipeline.forEach((step, idx) => {
+                const btn = document.createElement('button');
+                btn.id = `paged-step-btn-${idx}`;
+                btn.onclick = () => runPagedTrace(idx);
+                btn.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+                
+                btn.innerHTML = `
+                    <div class="flex items-center justify-between w-full">
+                        <span class="font-bold text-xs text-white tracking-wide uppercase font-mono">${step.title}</span>
+                        <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
+                    </div>
+                    <p class="text-xs leading-normal font-medium text-slate-400">${step.summary}</p>
+                `;
+                container.appendChild(btn);
+            });
+        }
+
+        function runPagedTrace(stepIdx) {
+            const data = pagedPipeline[stepIdx];
+
+            pagedPipeline.forEach((_, idx) => {
+                const buttonElement = document.getElementById(`paged-step-btn-${idx}`);
+                if(buttonElement) buttonElement.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+            });
+
+            const activeBtn = document.getElementById(`paged-step-btn-${stepIdx}`);
+            if(activeBtn) {
+                activeBtn.className = "w-full text-left p-4 rounded-xl bg-slate-800/80 border border-cyan-400 text-cyan-400 transition-all duration-200 flex flex-col gap-1";
+            }
+
+            // Sync visual data logs text parameters
+            document.getElementById('step-badge').innerText = data.badge;
+            document.getElementById('narrative-box').innerHTML = data.narrative;
+
+            // Reset physical grid layouts border parameters tags styles
+            for (let i = 0; i < 4; i++) {
+                const blockNode = document.getElementById(`vram-blk-${i}`);
+                blockNode.className = "p-3 bg-slate-900/40 border border-slate-800 rounded text-slate-600 mem-chunk";
+                blockNode.innerText = `Phys Block ${i}`;
+            }
+
+            // Light up target physical block nodes mapping coordinates records
+            data.activePhys.forEach(id => {
+                const targetNode = document.getElementById(`vram-blk-${id}`);
+                targetNode.className = "p-3 border rounded mem-chunk block-assigned";
+                targetNode.innerText = `Phys Block ${id} [ALLOCATED]`;
+            });
+
+            // Handle dual backslash parsing updates on LaTeX elements structures
+            document.getElementById('latex-box').innerText = `$$${data.latex}$$`;
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        window.onload = () => {
+            buildStepper();
+            runPagedTrace(0);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Optimizers Deep Dive (AdamW)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-purple-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-purple-500 to-cyan-500 rounded-lg text-slate-950">
+                    <i class="fa-solid fa-gauge-high text-xl text-white"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">LLM Optimization Engine Layer</span>
+                    <span class="text-xs text-slate-400 block font-mono">Comparing Stochastic Gradient Descent (SGD) vs. AdamW Mechanics</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-purple-400 font-bold">
+                Hyperparameters State
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-2xl font-black text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-circle-nodes text-purple-400"></i> Why Vanilla Gradient Descent Fails in LLMs
+            </h2>
+            <p class="text-slate-400 text-sm leading-relaxed mb-6">
+                Standard Stochastic Gradient Descent (SGD) treats all parameters identically. However, inside a Transformer model, some weights handle common words while others manage critical but rare tokens. If an optimizer uses a single blanket step size, it creates erratic training stalls. Modern models bypass this limitation via **Adaptive Optimizers**.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-purple-400 mb-1">1st Moment: Momentum ($m_t$)</h3>
+                    <p class="text-slate-400 leading-relaxed">Acts like a heavy rolling ball. It tracks an exponentially decaying average of past gradients. If the model hits a sudden flat plateau on the error surface, momentum carries the parameter updates smoothly right through it.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-cyan-400 mb-1">2nd Moment: Scaling Vector ($v_t$)</h3>
+                    <p class="text-slate-400 leading-relaxed">Tracks the variance of the gradients by keeping a running log of squared updates. The optimizer divides the step size by $\sqrt{v_t}$, which automatically scales down fast-changing variables while boosting columns that receive rare updates.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-emerald-400 mb-1">Weight Decay Correction</h3>
+                    <p class="text-slate-400 leading-relaxed">Original Adam combined weight decay inside its moving averages, which accidentally warped scaling updates. **AdamW** separates decay entirely, scaling it out independently to keep attention weight values regularized and stable.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <div class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
+                <div>
+                    <h3 class="text-sm font-bold tracking-wide text-white uppercase font-mono border-b border-slate-800 pb-2 mb-4">
+                        <i class="fa-solid fa-sliders text-cyan-400 mr-1.5"></i> 1. Optimizer Sandbox
+                    </h3>
+                    <p class="text-xs text-slate-400 leading-relaxed mb-6">
+                        Toggle between basic SGD and advanced AdamW. Click step to observe how AdamW uses adaptive scaling moments to efficiently navigate out of plateaus.
+                    </p>
+
+                    <div class="space-y-4">
+                        <div>
+                            <span class="text-[11px] font-mono text-slate-500 uppercase block mb-2">Select Optimization Strategy</span>
+                            <div class="grid grid-cols-2 gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                                <button onclick="setOptimizerStyle('sgd')" id="btn-opt-sgd" class="py-2 px-3 text-xs font-bold rounded-lg transition-all duration-200 text-slate-400 hover:text-white">
+                                    Classic SGD
+                                </button>
+                                <button onclick="setOptimizerStyle('adamw')" id="btn-opt-adamw" class="py-2 px-3 text-xs font-bold rounded-lg transition-all duration-200 bg-purple-500 text-slate-950 shadow-md">
+                                    AdamW Engine
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-2 pt-2">
+                            <button onclick="stepOptimizerPipeline()" class="flex-1 py-2.5 px-3 bg-purple-500 hover:bg-purple-600 text-slate-950 rounded-xl text-xs font-bold font-mono transition-all">
+                                <i class="fa-solid fa-play mr-1"></i> Compute Step Update
+                            </button>
+                            <button onclick="resetOptimizerState()" class="py-2 px-4 bg-slate-950 border border-slate-800 hover:bg-slate-800 rounded-xl text-xs font-bold font-mono transition-all">
+                                <i class="fa-solid fa-rotate-left"></i> Reset
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 mt-6 text-xs text-slate-400 space-y-1">
+                    <span class="text-white block uppercase font-mono tracking-wider font-semibold text-[10px] text-purple-400">⚙️ Adaptive Step Multiplier</span>
+                    <p class="margin-0 leading-normal" id="sandbox-explainer">
+                        AdamW divides updates by running variance to automatically balance step limits.
+                    </p>
+                </div>
+            </div>
+
+            <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-purple-500 animate-pulse" id="console-pulse"></span>
+                            <h3 class="text-sm font-bold tracking-wide text-white uppercase font-mono">Calculations Matrix Console</h3>
+                        </div>
+                        <span id="step-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">Iteration: 0</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4 mb-4 font-mono text-center">
+                        <div class="p-3 bg-slate-950 rounded-xl border border-slate-800">
+                            <span class="text-[9px] text-slate-500 block uppercase" id="lbl-m1">1st Moment - Momentum ($m_t$)</span>
+                            <span id="metric-m1" class="text-sm font-bold text-white">0.0000</span>
+                        </div>
+                        <div class="p-3 bg-slate-950 rounded-xl border border-slate-800">
+                            <span class="text-[9px] text-slate-500 block uppercase" id="lbl-m2">2nd Moment - Variance ($v_t$)</span>
+                            <span id="metric-m2" class="text-sm font-bold text-white">0.0000</span>
+                        </div>
+                    </div>
+
+                    <div id="narrative-box" class="text-xs text-slate-300 leading-relaxed mb-4">
+                        Select an engine type and click <b>Compute Step Update</b> to watch how variables track adaptive vector paths.
+                    </div>
+                </div>
+
+                <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                    <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                        <span><i class="fa-solid fa-square-root-variable text-purple-400 mr-1.5"></i> adamw_update_step.tex</span>
+                        <span class="text-slate-500 uppercase font-bold text-[9px]">LaTeX Engine</span>
+                    </div>
+                    <div class="p-4 text-center bg-black min-h-[60px] flex items-center justify-center text-xs" id="latex-box">
+                        $$\theta_{t} = \theta_{t-1} - \eta \cdot \left( \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon} + \lambda \theta_{t-1} \right)$$
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-lg font-bold text-white mb-2 font-mono"><i class="fa-solid fa-clock text-cyan-400 mr-1"></i> Where do Optimizers execute in LLMs?</h2>
+            <p class="text-slate-400 text-xs leading-relaxed mb-4">
+                The optimizer coordinates parameters outside the neural layer blocks. It is invoked at the very end of the training pass loop:
+            </p>
+            <div class="p-4 bg-slate-950 rounded-xl border border-slate-800 font-mono text-xs text-slate-400 space-y-2">
+                <div class="flex items-center gap-2"><span class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-500">Step 1</span> Tensors complete a Forward pass and compute Cross-Entropy Loss.</div>
+                <div class="flex items-center gap-2"><span class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-500">Step 2</span> The Backward pass processes parameters via calculus chain rules, generating raw gradients.</div>
+                <div class="flex items-center gap-2 text-purple-400 bg-purple-950/20 border border-purple-900/30 p-2 rounded"><span class="px-1.5 py-0.5 bg-purple-900 border border-purple-700 rounded text-white font-bold">Step 3 (Optimizer)</span> **AdamW sweeps across the model parameters**, reads raw gradients, computes moving moment factors, subtracts independent weight decay, and updates attention projections.</div>
+                <div class="flex items-center gap-2"><span class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-500">Step 4</span> Gradients are wiped via <code>optimizer.zero_grad()</code> to prep for the next data batch.</div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        LLM Optimizer Pipeline Tracking Framework Map
+    </footer>
+
+    <script>
+        let optimizerStyle = 'adamw';
+        let stepCount = 0;
+
+        // Internal calculation tracking registers
+        let currentWeight = 2.5;
+        let m1_momentum = 0.0;
+        let m2_variance = 0.0;
+
+        // Constants matching typical LLM pre-training environments (AdamW hyper-parameters configurations)
+        const beta1 = 0.9;
+        const beta2 = 0.95; // Found across common Llama configurations
+        const lr = 0.15;
+        const epsilon = 1e-8;
+        const weightDecay = 0.01;
+
+        function setOptimizerStyle(styleKey) {
+            optimizerStyle = styleKey;
+            
+            const btnSgd = document.getElementById('btn-opt-sgd');
+            const btnAdam = document.getElementById('btn-opt-adamw');
+            const pulse = document.getElementById('console-pulse');
+
+            if (styleKey === 'sgd') {
+                btnSgd.className = "py-2 px-3 text-xs font-bold rounded-lg transition-all duration-200 bg-cyan-500 text-slate-950 shadow-md";
+                btnAdam.className = "py-2 px-3 text-xs font-bold rounded-lg transition-all duration-200 text-slate-400 hover:text-white";
+                pulse.className = "w-2 h-2 rounded-full bg-cyan-400 animate-pulse";
+                
+                // Hide adaptive metric titles for SGD mode
+                document.getElementById('lbl-m1').innerText = "Static Gradient Value (g_t)";
+                document.getElementById('lbl-m2').innerText = "Bypassed Variable";
+                document.getElementById('sandbox-explainer').innerText = "Classic SGD scales changes by a static, fixed learning rate across all columns.";
+            } else {
+                btnAdam.className = "py-2 px-3 text-xs font-bold rounded-lg transition-all duration-200 bg-purple-500 text-slate-950 shadow-md";
+                btnSgd.className = "py-2 px-3 text-xs font-bold rounded-lg transition-all duration-200 text-slate-400 hover:text-white";
+                pulse.className = "w-2 h-2 rounded-full bg-purple-500 animate-pulse";
+                
+                document.getElementById('lbl-m1').innerText = "1st Moment - Momentum (m_t)";
+                document.getElementById('lbl-m2').innerText = "2nd Moment - Variance (v_t)";
+                document.getElementById('sandbox-explainer').innerText = "AdamW divides updates by running variance to automatically balance step limits.";
+            }
+            resetOptimizerState();
+        }
+
+        function stepOptimizerPipeline() {
+            stepCount++;
+            
+            // Simulating a changing gradient slope signal as updates run down a curve
+            const rawGradient = currentWeight * 0.8; 
+
+            if (optimizerStyle === 'sgd') {
+                // Vanilla SGD calculation loop: weight = weight - (lr * gradient)
+                currentWeight = currentWeight - (lr * rawGradient);
+                
+                document.getElementById('metric-m1').innerText = rawGradient.toFixed(4);
+                document.getElementById('metric-m2').innerText = "N/A (Bypassed)";
+                document.getElementById('narrative-box').innerHTML = `Executing standard Stochastic Gradient Descent step. The parameter weight moves strictly down the gradient by a fixed learning rate vector: <b>Weight = ${currentWeight.toFixed(4)}</b>.`;
+                document.getElementById('latex-box').innerText = `$$\\theta_{t} = \\theta_{t-1} - \\eta \\cdot g_t$$`;
+            } else {
+                // AdamW calculations pipeline implementation
+                // 1. Update biased first moment estimate (Momentum)
+                m1_momentum = beta1 * m1_momentum + (1 - beta1) * rawGradient;
+                // 2. Update biased second raw moment estimate (Variance tracking)
+                m2_variance = beta2 * m2_variance + (1 - beta2) * Math.pow(rawGradient, 2);
+
+                // 3. Compute bias-corrected first and second moment estimates
+                const m1_corrected = m1_momentum / (1 - Math.pow(beta1, stepCount));
+                const m2_corrected = m2_variance / (1 - Math.pow(beta2, stepCount));
+
+                // 4. Update parameter using AdamW independent weight decay execution
+                currentWeight = currentWeight - (lr * (m1_corrected / (Math.sqrt(m2_corrected) + epsilon) + weightDecay * currentWeight));
+
+                document.getElementById('metric-m1').innerText = m1_momentum.toFixed(4);
+                document.getElementById('metric-m2').innerText = m2_variance.toFixed(4);
+                
+                document.getElementById('narrative-box').innerHTML = `AdamW computes moving averages for both momentum ($m_t$) and tracking variance ($v_t$). It safely dampens updates to highly active parameters while scaling up updates for less active columns: <b>Weight = ${currentWeight.toFixed(4)}</b>.`;
+                document.getElementById('latex-box').innerText = `$$\\theta_{t} = \\theta_{t-1} - \\eta \\cdot \\left( \\frac{\\hat{m}_t}{\\sqrt{\\hat{v}_t} + \\epsilon} + \\lambda \\theta_{t-1} \\right)$$`;
+            }
+
+            document.getElementById('step-badge').innerText = `Iteration: ${stepCount}`;
+
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        function resetOptimizerState() {
+            stepCount = 0;
+            currentWeight = 2.5;
+            m1_momentum = 0.0;
+            m2_variance = 0.0;
+            
+            document.getElementById('metric-m1').innerText = "0.0000";
+            document.getElementById('metric-m2').innerText = "0.0000";
+            document.getElementById('step-badge').innerText = "Iteration: 0";
+            document.getElementById('narrative-box').innerHTML = "Select an engine type and click <b>Compute Step Update</b> to watch how variables track adaptive vector paths.";
+        }
+
+        // Initialize default app setup on rendering completions
+        window.onload = () => {
+            setOptimizerStyle('adamw');
+        }
+</script>
+
+</body>
+</html>

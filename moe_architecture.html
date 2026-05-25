@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mixture of Experts (MoE) Architecture Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        .expert-node { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .expert-active { border-color: #a855f7 !important; background: rgba(168, 85, 247, 0.15) !important; box-shadow: 0 0 15px rgba(168, 85, 247, 0.4); }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-purple-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-purple-500 to-cyan-500 rounded-lg">
+                    <i class="fa-solid fa-people-group text-xl text-slate-950"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">LLM Mixture of Experts (MoE) Visualizer</span>
+                    <span class="text-xs text-slate-400 block font-mono">Tracing Sparse Gating, Top-k Expert Routing, and Conditional Token Execution</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-purple-400 font-bold">
+                Sparse Conditional Computation
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-2xl font-black text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-circle-nodes text-purple-400"></i> What is a Mixture of Experts (MoE) Layer?
+            </h2>
+            <p class="text-slate-400 text-sm leading-relaxed mb-6">
+                In standard dense LLMs, every single parameter activates for every single word. This makes scaling computationally expensive. A <strong>Sparse Mixture of Experts (MoE)</strong> architecture replaces the standard, static Feed-Forward Network (FFN) layer with a dynamic pool of specialized mini-networks called <strong>Experts</strong>. A lightweight <strong>Gating Network (Router)</strong> evaluates incoming tokens and dynamically sends them to the best-suited experts.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-purple-400 mb-1">The Gating Router</h3>
+                    <p class="text-slate-400 leading-relaxed">The router acts as a smart traffic controller. It takes an incoming token's activation vector ($x$) and multiplies it by a trainable routing matrix ($W_g$). This yields a probability distribution across all experts, calculating which sub-networks hold the right knowledge pool.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-cyan-400 mb-1">Top-k Sparsity ($k=2$)</h3>
+                    <p class="text-slate-400 leading-relaxed">Instead of utilizing all experts, MoE layers enforce strict sparsity. It keeps only the top $k$ highest routing coefficients (typically $k=2$) and drops the remaining scores to absolute zero. This keeps computing costs flat, even as total parameters scale up.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-emerald-400 mb-1">Linear Synthesis Combine</h3>
+                    <p class="text-slate-400 leading-relaxed">The active experts process the token parameter independently. The router then multiplies each expert's output vector by its original gating probability score, combining them back into a single context tensor ready for the next layer.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+            <div class="mb-6">
+                <span class="text-[10px] uppercase font-mono tracking-widest font-bold px-2 py-0.5 rounded border border-slate-700 text-slate-400 bg-slate-950">Live Topology Map</span>
+                <h2 class="text-2xl font-black text-white mt-1">Interactive Token Routing Pipeline</h2>
+                <p class="text-slate-400 text-sm mt-0.5">Click a token type below to see how the Router parses its vector and splits computing tasks across specialized experts.</p>
+            </div>
+
+            <div class="flex flex-wrap gap-2 mb-6">
+                <button onclick="simulateRouting('math')" id="tok-btn-math" class="px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all">
+                    🔢 Token: "7.34" (Mathematical)
+                </button>
+                <button onclick="simulateRouting('code')" id="tok-btn-code" class="px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all">
+                    💻 Token: "return" (Programming)
+                </button>
+                <button onclick="simulateRouting('creative')" id="tok-btn-creative" class="px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all">
+                    🎨 Token: "dragon" (Creative/Prose)
+                </button>
+            </div>
+
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-6 overflow-x-auto custom-scrollbar mb-6">
+                <div class="min-w-[900px] flex items-center justify-around font-mono text-xs py-4">
+                    
+                    <div class="p-4 bg-slate-900 border border-slate-800 rounded-xl text-center w-36">
+                        <span class="block text-cyan-400 font-bold mb-1">Token Vector ($x$)</span>
+                        <div class="p-2 bg-black rounded border border-slate-800 text-[10px] text-slate-500" id="vis-token-txt">
+                            "7.34"
+                        </div>
+                    </div>
+
+                    <div class="text-slate-700 text-base"><i class="fa-solid fa-angle-right"></i></div>
+
+                    <div class="p-4 bg-slate-900 border border-purple-500/30 rounded-xl text-center w-48 shadow-md">
+                        <span class="block text-purple-400 font-bold mb-1"><i class="fa-solid fa-traffic-light"></i> Gating Router</span>
+                        <div class="p-2 bg-black rounded border border-slate-800 text-[10px] text-slate-400">
+                            $\text{Softmax}(\text{Top2}(x \cdot W_g))$
+                        </div>
+                    </div>
+
+                    <div class="text-slate-700 text-base"><i class="fa-solid fa-angle-right"></i></div>
+
+                    <div class="flex flex-col gap-2">
+                        <div id="exp-node-0" class="px-4 py-2 bg-slate-900 border border-slate-800 rounded-lg text-center w-52 expert-node text-slate-400">
+                            <strong>Expert 1:</strong> Logic / Math FFN
+                        </div>
+                        <div id="exp-node-1" class="px-4 py-2 bg-slate-900 border border-slate-800 rounded-lg text-center w-52 expert-node text-slate-400">
+                            <strong>Expert 2:</strong> Syntax / Code FFN
+                        </div>
+                        <div id="exp-node-2" class="px-4 py-2 bg-slate-900 border border-slate-800 rounded-lg text-center w-52 expert-node text-slate-400">
+                            <strong>Expert 3:</strong> Linguistics / Prose FFN
+                        </div>
+                        <div id="exp-node-3" class="px-4 py-2 bg-slate-900 border border-slate-800 rounded-lg text-center w-52 expert-node text-slate-400">
+                            <strong>Expert 4:</strong> Translation / Multilingual
+                        </div>
+                    </div>
+
+                    <div class="text-slate-700 text-base"><i class="fa-solid fa-angle-right"></i></div>
+
+                    <div class="p-4 bg-slate-900 border border-emerald-500/30 rounded-xl text-center w-40">
+                        <span class="block text-emerald-400 font-bold mb-1">Linear Combine</span>
+                        <div class="p-2 bg-black rounded border border-slate-800 text-[10px] text-slate-400">
+                            $y = \sum G(x)_i E_i(x)$
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                <div class="lg:col-span-5 bg-slate-950 border border-slate-800 p-5 rounded-xl flex flex-col justify-between">
+                    <div>
+                        <h4 class="text-xs font-bold font-mono text-slate-400 uppercase tracking-wider mb-2">Routing Diagnostic Summary</h4>
+                        <div id="routing-narrative" class="text-xs text-slate-300 leading-relaxed">
+                            Select an interactive input token above to kickstart the routing simulation loop...
+                        </div>
+                    </div>
+                    <div class="mt-4 p-3 bg-slate-900/50 rounded-lg border border-slate-800 font-mono text-[10px] text-slate-500 leading-normal">
+                        Active Top-k constraint values are bound strictly to $k=2$. The remaining 2 inactive experts are bypassed completely, consuming 0% memory bandwidth for this token execution step.
+                    </div>
+                </div>
+
+                <div class="lg:col-span-7 bg-black rounded-xl border border-slate-800 overflow-hidden flex flex-col justify-between">
+                    <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                        <span><i class="fa-solid fa-chart-bar text-purple-400 mr-1.5"></i> router_softmax_distribution.json</span>
+                        <span class="text-[9px] bg-purple-950 border border-purple-800 text-purple-400 font-bold px-1.5 py-0.5 rounded">G(x) Scalars</span>
+                    </div>
+                    <pre class="p-4 text-xs font-mono text-purple-400 overflow-x-auto h-36 bg-black" id="json-display-box"><code>// Array dump frames</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-lg font-bold text-white mb-2 font-mono"><i class="fa-solid fa-clock text-amber-400 mr-1"></i> When and Where are MoE Blocks Deployed?</h2>
+            <p class="text-slate-400 text-xs leading-relaxed mb-4">
+                MoE architecture specifically targets the <strong>Feed-Forward Network (FFN)</strong> sections inside the Transformer block chain. Here is how a sequence passes through them:
+            </p>
+            <div class="p-4 bg-slate-950 rounded-xl border border-slate-800 font-mono text-xs text-slate-400 space-y-2">
+                <div class="flex items-center gap-2"><span class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-500">Step 1</span> Multi-Head Self-Attention scores are calculated across tokens to establish temporal context dependencies.</div>
+                <div class="flex items-center gap-2 text-purple-400 bg-purple-950/20 border border-purple-900/30 p-2 rounded"><span class="px-1.5 py-0.5 bg-purple-900 border border-purple-700 rounded text-white font-bold">Step 2 (MoE FFN)</span> Instead of passing through a static linear layer, the tensor lands on the Router matrix $\rightarrow$ top-2 experts unlock $\rightarrow$ sub-networks run parallel checks.</div>
+                <div class="flex items-center gap-2"><span class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-500">Step 3</span> The outputs from the selected experts are merged back together via weighted scaling additions and forwarded to the next layer block stack.</div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        LLM Mixture of Experts (MoE) Architecture Map Pipeline
+    </footer>
+
+    <script>
+        const routingData = {
+            math: {
+                token: "7.34",
+                narrative: "The Router receives the mathematical token <b>'7.34'</b>. It maps the vector against the knowledge grid and discovers a high correlation with logic and math. The Top-2 filtering mechanism activates <strong>Expert 1 (Math)</strong> and <strong>Expert 4 (Translation/Numbers)</strong>, routing the workload exclusively to them.",
+                distribution: { "expert_1_math": 0.72, "expert_2_code": 0.04, "expert_3_prose": 0.00, "expert_4_translation": 0.24 },
+                activeNodes: [0, 3]
+            },
+            code: {
+                token: "return",
+                narrative: "The programming syntax token <b>'return'</b> hits the gating network. The routing weights recognize structure and select <strong>Expert 2 (Syntax/Code)</strong> with a massive confidence score, paired with <strong>Expert 1 (Math/Logic)</strong> as the backup channel to parse algorithmic reasoning loops.",
+                distribution: { "expert_1_math": 0.15, "expert_2_code": 0.81, "expert_3_prose": 0.04, "expert_4_translation": 0.00 },
+                activeNodes: [0, 1]
+            },
+            creative: {
+                token: "dragon",
+                narrative: "The descriptive noun token <b>'dragon'</b> reaches the layer. The Gating Router shifts execution tracks away from arithmetic modules, allocating 100% of Top-2 activation fields to <strong>Expert 3 (Linguistics/Prose)</strong> and <strong>Expert 4 (Translation/Multilingual cultural nodes)</strong> to process contextual imagery parameters.",
+                distribution: { "expert_1_math": 0.00, "expert_2_code": 0.02, "expert_3_prose": 0.68, "expert_4_translation": 0.30 },
+                activeNodes: [2, 3]
+            }
+        };
+
+        function simulateRouting(categoryKey) {
+            const data = routingData[categoryKey];
+
+            // Update UI fields
+            document.getElementById('vis-token-txt').innerText = `"${data.token}"`;
+            document.getElementById('routing-narrative').innerHTML = data.narrative;
+            
+            // Format dynamic JSON payload trace with safe formatting
+            const jsonText = JSON.stringify({
+                "input_token_string": data.token,
+                "top_k_threshold": 2,
+                "active_router_softmax_distribution": data.distribution,
+                "gating_action": "SPARSE_CONDITIONAL_ROUTING_SUCCESS"
+            }, null, 2);
+            document.getElementById('json-display-box').innerText = jsonText;
+
+            // Highlight category selection buttons
+            ['math', 'code', 'creative'].forEach(k => {
+                const btn = document.getElementById(`tok-btn-${k}`);
+                if (k === categoryKey) {
+                    btn.className = "px-4 py-2 bg-purple-500 border border-purple-400 text-slate-950 text-xs font-mono font-bold rounded-xl transition-all shadow-md";
+                } else {
+                    btn.className = "px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all text-slate-400";
+                }
+            });
+
+            // Handle highlighting styles across the visual Expert nodes pool
+            for (let i = 0; i < 4; i++) {
+                const node = document.getElementById(`exp-node-${i}`);
+                node.className = "px-4 py-2 bg-slate-900 border border-slate-800 rounded-lg text-center w-52 expert-node text-slate-500 opacity-40";
+            }
+
+            // Light up the specific top-2 chosen expert nodes
+            data.activeNodes.forEach(idx => {
+                const node = document.getElementById(`exp-node-${idx}`);
+                node.className = "px-4 py-2 rounded-lg text-center w-52 expert-node expert-active text-white font-bold";
+            });
+        }
+
+        // Boot default framework tracking simulation loops on load
+        window.onload = () => {
+            simulateRouting('math');
+        }
+    </script>
+</body>
+</html>

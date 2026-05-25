@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QLoRA Fine-Tuning with Unsloth Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        blue: { 400: '#60a5fa', 500: '#3b82f6' },
+                        orange: { 400: '#fb923c', 500: '#f97316' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        .matrix-frozen { background: rgba(59, 130, 246, 0.1); border: 1px dashed rgba(59, 130, 246, 0.4); color: #93c5fd; }
+        .matrix-trainable { background: rgba(249, 115, 22, 0.15); border: 2px solid #f97316; color: #fdba74; font-weight: bold; }
+        .unsloth-speed { animation: pulseGlow 1.5s infinite ease-in-out; }
+        @keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 5px rgba(168, 85, 247, 0.2); } 50% { box-shadow: 0 0 20px rgba(168, 85, 247, 0.6); border-color: #c084fc; } }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-orange-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-orange-500 to-purple-600 rounded-lg text-slate-950">
+                    <i class="fa-solid fa-bolt-lightning text-xl text-white"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">QLoRA + Unsloth Optimization Engine</span>
+                    <span class="text-xs text-slate-400 block font-mono">Visualizing 4-bit Quantization, LoRA Adapters, and Triton Kernels</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-purple-400 font-bold">
+                ⚡ 2x Faster • 60% Less VRAM
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+            <div class="mb-6">
+                <span class="text-[10px] uppercase font-mono tracking-widest font-bold px-2 py-0.5 rounded border border-slate-700 text-slate-400 bg-slate-950">Architecture State Map</span>
+                <h2 class="text-2xl font-black text-white mt-2">The Forward & Backward Pass Weight Split</h2>
+                <p class="text-slate-400 text-sm mt-1">Click the pipeline stages below to see how hidden states ($X$) interact with 4-bit base weights ($W$) and update low-rank adapters ($A \rightarrow B$).</p>
+            </div>
+
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-6 overflow-x-auto custom-scrollbar">
+                <div class="min-w-[950px] py-4 flex items-center justify-around">
+                    
+                    <div class="text-center">
+                        <div class="px-4 py-6 bg-slate-900 border border-slate-700 rounded-xl w-28 mx-auto font-mono text-sm shadow-md">
+                            <span class="block text-slate-400 text-xs mb-2">Input Tensor</span>
+                            <div class="h-12 bg-slate-800 rounded border border-slate-600 flex items-center justify-center font-bold text-white">$X$</div>
+                        </div>
+                        <span class="text-[10px] block mt-2 font-mono text-slate-500">Activation State</span>
+                    </div>
+
+                    <div class="text-2xl font-bold text-slate-600"><i class="fa-solid fa-arrow-right-long"></i></div>
+
+                    <div class="text-center relative">
+                        <div id="matrix-base-weight" class="p-4 matrix-frozen rounded-xl w-64 transition-all duration-300 shadow-lg">
+                            <div class="flex justify-between items-center mb-3">
+                                <span class="text-xs font-bold uppercase tracking-wider font-mono text-blue-400">Base Weight ($W$)</span>
+                                <span class="text-[9px] font-mono bg-blue-950 border border-blue-800 px-1.5 py-0.5 rounded text-blue-400 font-bold">4-bit NF4</span>
+                            </div>
+                            <div class="grid grid-cols-4 gap-1.5 font-mono text-[10px] text-center p-2 bg-slate-950/80 rounded border border-slate-800">
+                                <div class="p-1 bg-blue-950/40 rounded border border-blue-900/40">-0.12</div>
+                                <div class="p-1 bg-blue-950/40 rounded border border-blue-900/40">0.45</div>
+                                <div class="p-1 bg-blue-950/40 rounded border border-blue-900/40">-0.78</div>
+                                <div class="p-1 bg-blue-950/40 rounded border border-blue-900/40">0.22</div>
+                                <div class="p-1 bg-blue-950/40 rounded border border-blue-900/40">0.91</div>
+                                <div class="p-1 bg-blue-950/40 rounded border border-blue-900/40">-0.34</div>
+                                <div class="p-1 bg-blue-950/40 rounded border border-blue-900/40">0.03</div>
+                                <div class="p-1 bg-blue-950/40 rounded border border-blue-900/40">0.56</div>
+                            </div>
+                            <div class="text-[10px] text-slate-400 mt-2 font-medium italic">Frozen • No Gradients Saved</div>
+                        </div>
+                    </div>
+
+                    <div class="text-xl font-black text-slate-500">+</div>
+
+                    <div class="flex items-center gap-4 p-4 bg-slate-900/40 border border-slate-800 rounded-xl shadow-inner">
+                        <div class="text-center">
+                            <div id="matrix-lora-a" class="p-3 matrix-trainable rounded-lg w-32 transition-all duration-300">
+                                <div class="text-[10px] font-mono text-orange-400 font-bold mb-1.5">Adapter $A$ (Down)</div>
+                                <div class="grid grid-cols-2 gap-1 font-mono text-[9px] bg-slate-950 p-1 rounded border border-slate-800">
+                                    <div class="p-1 bg-orange-950/30 rounded">0.01</div><div class="p-1 bg-orange-950/30 rounded">-0.04</div>
+                                    <div class="p-1 bg-orange-950/30 rounded">-0.02</div><div class="p-1 bg-orange-950/30 rounded">0.05</div>
+                                </div>
+                                <span class="text-[9px] block mt-1.5 text-slate-400">Rank ($r=16$)</span>
+                            </div>
+                        </div>
+
+                        <div class="text-xs font-bold text-slate-500">×</div>
+
+                        <div class="text-center">
+                            <div id="matrix-lora-b" class="p-3 matrix-trainable rounded-lg w-32 transition-all duration-300">
+                                <div class="text-[10px] font-mono text-orange-400 font-bold mb-1.5">Adapter $B$ (Up)</div>
+                                <div class="grid grid-cols-2 gap-1 font-mono text-[9px] bg-slate-950 p-1 rounded border border-slate-800">
+                                    <div class="p-1 bg-orange-950/30 rounded">0.12</div><div class="p-1 bg-orange-950/30 rounded">0.00</div>
+                                    <div class="p-1 bg-orange-950/30 rounded">0.34</div><div class="p-1 bg-orange-950/30 rounded">0.11</div>
+                                </div>
+                                <span class="text-[9px] block mt-1.5 text-slate-400">Active Gradients</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="text-2xl font-bold text-slate-600"><i class="fa-solid fa-arrow-right-long"></i></div>
+
+                    <div class="text-center">
+                        <div id="node-unsloth" class="p-4 bg-slate-900 border border-slate-700 rounded-xl w-40 font-mono text-xs transition-all duration-300 shadow-md">
+                            <span class="block text-purple-400 font-bold mb-1"><i class="fa-solid fa-wand-magic-sparkles mr-1 text-[10px]"></i> Triton Output</span>
+                            <div class="p-2 bg-black rounded border border-slate-800 text-left text-[10px] text-slate-300 leading-tight">
+                                <span class="text-emerald-400">Out</span> = $XW + XAB$<br>
+                                <span class="text-purple-400 font-semibold">Single-Pass fused!</span>
+                            </div>
+                        </div>
+                        <span class="text-[10px] block mt-2 font-mono text-slate-500">Forward State Context</span>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div class="lg:col-span-5 flex flex-col gap-3" id="step-control-container">
+                </div>
+
+            <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                        <div class="flex items-center gap-2">
+                            <div class="w-2 h-2 rounded-full bg-orange-500"></div>
+                            <h3 class="text-sm font-bold tracking-wide text-white uppercase font-mono">Mathematical & Execution Trace</h3>
+                        </div>
+                        <span id="step-index-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">PIPELINE UNINITIALIZED</span>
+                    </div>
+
+                    <div id="step-narrative" class="text-sm text-slate-300 leading-relaxed mb-4">
+                        Select a fine-tuning stage from the controller strip to initialize data streams...
+                    </div>
+                </div>
+
+                <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                    <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[11px] text-slate-400 font-mono">
+                        <span><i class="fa-brands fa-python text-orange-400 mr-1.5"></i> unsloth_pipeline_opt.py</span>
+                        <span class="text-[9px] uppercase tracking-wider bg-slate-900 px-1.5 py-0.5 rounded text-orange-400 font-bold">Unsloth API</span>
+                    </div>
+                    <pre class="p-4 text-xs font-mono text-orange-300 overflow-x-auto h-44 custom-scrollbar bg-black" id="code-box"><code># Python Frame Configuration</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 lg:p-8">
+            <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2"><i class="fa-solid fa-circle-question text-purple-400"></i> Why Unsloth Matters for QLoRA Tuning</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h4 class="font-bold text-orange-400 mb-1">1. NormalFloat 4 (NF4) Quantization</h4>
+                    <p class="text-slate-400 leading-relaxed">Standard 4-bit rounding destroys model intelligence. QLoRA introduces <strong>NF4</strong>, a specialized data type that maps weights into quantiles based on an even statistical distribution. This keeps information loss near zero while dropping memory consumption dramatically.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h4 class="font-bold text-purple-400 mb-1">2. Eliminating PyTorch Overhead</h4>
+                    <p class="text-slate-400 leading-relaxed">Vanilla QLoRA uses separate Python libraries for quantization (BitsAndBytes) and adapters (PEFT). Constantly casting data types back and forth bottlenecks hardware. <strong>Unsloth</strong> solves this by fusing these steps directly inside custom hardware blocks.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h4 class="font-bold text-blue-400 mb-1">3. Hand-Written OpenAI Triton Kernels</h4>
+                    <p class="text-slate-400 leading-relaxed">By rewriting the model's backpropagation mathematics into low-level <strong>Triton GPU kernels</strong>, Unsloth eliminates intermediate activation storage steps. This drops VRAM overhead by over 60%, preventing out-of-memory errors on consumer graphics cards.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        QLoRA + Unsloth Training Architecture Pipeline Simulator
+    </footer>
+
+    <script>
+        const qloraPipeline = [
+            {
+                title: "1. NF4 Base Model Loading",
+                summary: "Load the massive base LLM weights locked in compressed 4-bit precision.",
+                narrative: "The base model parameters are loaded straight into memory using <strong>NormalFloat 4 (NF4)</strong> quantization. This compresses a 16-bit float weight matrix down to a fraction of its footprint. These weights are flagged as completely frozen (<code>requires_grad=False</code>) to ensure they are never updated during the training loop.",
+                code: "from unsloth import FastLanguageModel\n\nmodel, tokenizer = FastLanguageModel.from_pretrained(\n    model_name = 'unsloth/llama-3-8b-Instruct-bnb-4bit',\n    max_seq_length = 2048,\n    load_in_4bit = True # Native NF4 initialization\n)",
+                highlight: "base"
+            },
+            {
+                title: "2. Low-Rank Adapter Injection",
+                summary: "Inject small, high-precision parameter adapters into attention layers.",
+                narrative: "Instead of configuring billions of base variables, we wrap specific attention blocks with lightweight adapter weight pairs ($A$ and $B$) using <strong>LoRA</strong>. These matrices use unquantized, full-precision tracking to capture updates, keeping trainable parameters well below 1% of the overall model footprint.",
+                code: "model = FastLanguageModel.get_peft_model(\n    model,\n    r = 16,           # Choose any rank size\n    target_modules = ['q_proj', 'k_proj', 'v_proj', 'o_proj'],\n    lora_alpha = 16,\n    lora_dropout = 0,\n    bias = 'none'\n)",
+                highlight: "adapters"
+            },
+            {
+                title: "3. Double Quantization Allocation",
+                summary: "Compress quantization constants to squeeze out extra VRAM savings.",
+                narrative: "Every quantized block needs quantization constants to scale its values accurately back to full precision. QLoRA performs a secondary compression step—<strong>Double Quantization</strong>—compressing those constants themselves from 32-bit floats to 8-bit floats. This saves an average of 0.37 GB of VRAM on standard setups.",
+                code: "# Handled automatically under Unsloth's optimized core runtime config\n# Quantization scaling constants are packed tightly in blocks of 64\n# Saves an additional 32 bits per quantization block automatically.",
+                highlight: "base"
+            },
+            {
+                title: "4. Fused Forward Pass Execution",
+                summary: "Compute predictions in a single pass using fused GPU kernels.",
+                narrative: "Standard pipelines unpack 4-bit weights into 16-bit spaces, run matrix multiplication, and repack them. <strong>Unsloth overrides this</strong> by executing a single fused GPU kernel. It computes $XW + XAB$ on the fly in a single step, preventing memory fragmentation and speeding up the forward pass.",
+                code: "# Trainer execution loops invoke custom hand-written Triton code loops:\n# Forward computation fuses cross-entropy calculations\n# directly into the matrix projection blocks.\ntrainer.train()",
+                highlight: "unsloth"
+            },
+            {
+                title: "5. Gradient Calculation & Backprop",
+                summary: "Isolate gradient calculations exclusively to lightweight adapter layers.",
+                narrative: "During backpropagation, error gradients move directly through the network without saving any states for the base model weights. Gradients are only calculated and applied to updates for the lightweight <strong>Matrices A and B</strong>. Unsloth's manual backpropagation overrides ensure no unnecessary activation tensors are held in VRAM.",
+                code: "# Triton backpropagation kernels mathematically compute inputs\n# directly into LoRA derivatives without allocating redundant intermediate copies.\n# This completely eliminates typical PyTorch memory overhead ceilings.",
+                highlight: "adapters"
+            }
+        ];
+
+        function buildStepperInterface() {
+            const container = document.getElementById('step-control-container');
+            container.innerHTML = '';
+
+            qloraPipeline.forEach((step, idx) => {
+                const btn = document.createElement('button');
+                btn.id = `qlora-btn-node-${idx}`;
+                btn.onclick = () => renderActiveStateFrame(idx);
+                btn.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+                
+                btn.innerHTML = `
+                    <div class="flex items-center justify-between w-full">
+                        <span class="font-bold text-xs text-white tracking-wide uppercase font-mono">${step.title}</span>
+                        <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
+                    </div>
+                    <p class="text-xs leading-normal font-medium text-slate-400">${step.summary}</p>
+                `;
+                container.appendChild(btn);
+            });
+        }
+
+        function renderActiveStateFrame(stepIdx) {
+            const data = qloraPipeline[stepIdx];
+
+            qloraPipeline.forEach((_, idx) => {
+                const node = document.getElementById('qlora-btn-node-' + idx);
+                if(node) node.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+            });
+
+            const activeBtn = document.getElementById('qlora-btn-node-' + stepIdx);
+            if(activeBtn) {
+                activeBtn.className = "w-full text-left p-4 rounded-xl bg-slate-800/80 border border-orange-500 text-orange-400 transition-all duration-200 flex flex-col gap-1";
+            }
+
+            document.getElementById('step-index-badge').innerText = "FINE-TUNING PHASE RUNTIME STEP: " + (stepIdx + 1) + " / " + qloraPipeline.length;
+            document.getElementById('step-narrative').innerHTML = data.narrative;
+            document.getElementById('code-box').innerText = data.code;
+
+            // Trigger MathJax typesetting so it processes the newly inserted text
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+
+            const baseMatrix = document.getElementById('matrix-base-weight');
+            const loraA = document.getElementById('matrix-lora-a');
+            const loraB = document.getElementById('matrix-lora-b');
+            const unslothNode = document.getElementById('node-unsloth');
+
+            baseMatrix.className = "p-4 matrix-frozen rounded-xl w-64 transition-all duration-300 shadow-lg";
+            loraA.className = "p-3 matrix-trainable rounded-lg w-32 transition-all duration-300";
+            loraB.className = "p-3 matrix-trainable rounded-lg w-32 transition-all duration-300";
+            unslothNode.className = "p-4 bg-slate-900 border border-slate-700 rounded-xl w-40 font-mono text-xs transition-all duration-300 shadow-md";
+
+            if (data.highlight === 'base') {
+                baseMatrix.className += " border-solid border-2 border-blue-400 shadow-[0_0_15px_rgba(96,165,251,0.3)] bg-blue-950/20";
+            } else if (data.highlight === 'adapters') {
+                loraA.className += " shadow-[0_0_15px_rgba(249,113,22,0.4)] bg-orange-950/40";
+                loraB.className += " shadow-[0_0_15px_rgba(249,113,22,0.4)] bg-orange-950/40";
+            } else if (data.highlight === 'unsloth') {
+                unslothNode.className += " unsloth-speed border-purple-400 bg-purple-950/20 text-white";
+            }
+        }
+
+        window.onload = () => {
+            buildStepperInterface();
+            renderActiveStateFrame(0);
+        }
+    </script>
+</body>
+</html>

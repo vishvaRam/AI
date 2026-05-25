@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KV-Cache Compression Visualizer: GQA vs MQA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        .head-node { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .head-highlight { border-color: #a855f7 !important; background: rgba(168, 85, 247, 0.2) !important; color: white !important; font-weight: bold; }
+        .kv-highlight { border-color: #22d3ee !important; background: rgba(34, 211, 238, 0.2) !important; color: white !important; font-weight: bold; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-purple-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-purple-500 to-cyan-500 rounded-lg">
+                    <i class="fa-solid fa-compress text-xl text-slate-950"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">LLM Attention Head Pooling Visualizer</span>
+                    <span class="text-xs text-slate-400 block font-mono">Comparing Multi-Head (MHA), Multi-Query (MQA), and Grouped-Query Attention (GQA)</span>
+                </div>
+            </div>
+            
+            <div class="bg-slate-950 p-1 rounded-xl border border-slate-800 flex">
+                <button onclick="setAttentionLayout('mha')" id="btn-mha" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 text-slate-400">MHA</button>
+                <button onclick="setAttentionLayout('mqa')" id="btn-mqa" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 text-slate-400">MQA</button>
+                <button onclick="setAttentionLayout('gqa')" id="btn-gqa" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 text-slate-400">GQA</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-2xl font-black text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-circle-nodes text-purple-400"></i> Compressing Attention Matrix Memory Dimensions
+            </h2>
+            <p class="text-slate-400 text-sm leading-relaxed mb-6">
+                During autoregressive text generation, an LLM preserves Key and Value matrices across historical token footprints to keep processing overhead flat. In standard models, this KV-Cache expands drastically with sequence length. By implementing asymmetric head clustering configurations, modern networks shrink VRAM caching demands while keeping reasoning accurate.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-purple-400 mb-1">Multi-Head Attention (MHA)</h3>
+                    <p class="text-slate-400 leading-relaxed">The classic approach. Every individual Query head ($Q$) tracks an independent, dedicated Key ($K$) and Value ($V$) head parameter grid. This offers rich context mapping variations but burdens your hardware arrays with severe memory limits.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-cyan-400 mb-1">Multi-Query Attention (MQA)</h3>
+                    <p class="text-slate-400 leading-relaxed">The extreme compression design. It forces every single Query head to share a single, joint Key and Value head pair. This cuts memory footings down significantly but risks losing fine linguistic tracking nuances.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-emerald-400 mb-1">Grouped-Query Attention (GQA)</h3>
+                    <p class="text-slate-400 leading-relaxed">The production state-of-the-art. Query channels are grouped into distinct, uniform clusters. Each cluster routes updates to a shared, centralized Key-Value head pair, delivering high accuracy with minimized memory consumption.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+            <div class="mb-4">
+                <span id="strategy-badge" class="text-[10px] uppercase font-mono tracking-widest font-bold px-2 py-0.5 rounded border border-slate-700 text-slate-400 bg-slate-950">Strategy Status</span>
+                <h2 id="strategy-title" class="text-2xl font-black text-white mt-1">Head Allocation Schematic Map</h2>
+                <p id="strategy-desc" class="text-slate-400 text-sm mt-0.5">Select a layout from the header menu to trace the routing connections between Query channels and Key-Value parameter pairs.</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                <div class="lg:col-span-6 bg-slate-950 border border-slate-800 rounded-xl p-6 flex flex-col justify-center items-center">
+                    <span class="text-[9px] font-mono text-slate-500 uppercase block mb-4 self-start">Active Routing Interconnects</span>
+                    
+                    <div class="flex justify-around items-center w-full max-w-md font-mono text-xs">
+                        <div class="flex flex-col gap-2" id="query-heads-column">
+                            <span class="text-[9px] text-slate-500 text-center uppercase block">Queries ($Q$)</span>
+                            <div id="q-head-0" class="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-400 text-center w-28 head-node">Query Head 0</div>
+                            <div id="q-head-1" class="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-400 text-center w-28 head-node">Query Head 1</div>
+                            <div id="q-head-2" class="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-400 text-center w-28 head-node">Query Head 2</div>
+                            <div id="q-head-3" class="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-400 text-center w-28 head-node">Query Head 3</div>
+                        </div>
+
+                        <div class="text-slate-700 text-base flex flex-col gap-4">
+                            <i class="fa-solid fa-shuffle"></i>
+                        </div>
+
+                        <div class="flex flex-col gap-2" id="kv-heads-column">
+                            <span class="text-[9px] text-slate-500 text-center uppercase block">Keys/Values ($KV$)</span>
+                            </div>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-6 bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
+                            <h3 class="text-xs font-bold tracking-wide text-white uppercase font-mono">Structural Memory Footprint Report</h3>
+                            <span id="compression-badge" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-950 font-bold">VRAM BOUNDS</span>
+                        </div>
+                        <div id="narrative-box" class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Selecting structural tracking arrays matrix properties...
+                        </div>
+                    </div>
+
+                    <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                        <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                            <span><i class="fa-solid fa-square-root-variable text-purple-400 mr-1.5"></i> cache_memory_overhead.tex</span>
+                            <span class="text-slate-500 uppercase font-bold text-[9px]">KV-Cache Footprint</span>
+                        </div>
+                        <div class="p-4 text-center bg-black min-h-[65px] flex items-center justify-center text-xs text-purple-300" id="latex-box">
+                            $$\text{Matrix Parameters Expressions}$$
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        LLM Attention Mechanism Pooling Strategy Framework Layer Map
+    </footer>
+
+    <script>
+        const attentionConfigs = {
+            mha: {
+                badge: "Standard Multi-Head Attention Layout",
+                title: "MHA: Symmetric Parameter Distribution",
+                desc: "Every single Query channel links to its own unique Key-Value memory block.",
+                compression: "1x FOOTPRINT (Baseline Maximum Space)",
+                compressionColor: "text-red-400 bg-red-950 border-red-900",
+                narrative: "<strong>Multi-Head Attention (MHA)</strong> allocates an independent Key ($K$) and Value ($V$) head matching every Query head ($Q$). For 4 Query heads, it instantiates 4 active KV pairs. While this architecture gives the model maximum representational power, the linear memory expansion makes it incredibly expensive to scale over long context windows.",
+                latex: "\\text{Memory}_{\\text{MHA}} = 2 \\times \\text{Layers} \\times \\text{Precision} \\times \\text{SeqLen} \\times H_Q \\times d_k",
+                kvCells: [
+                    { label: "KV Pair 0", class: "kv-highlight" },
+                    { label: "KV Pair 1", class: "kv-highlight" },
+                    { label: "KV Pair 2", class: "kv-highlight" },
+                    { label: "KV Pair 3", class: "kv-highlight" }
+                ],
+                highlights: [0, 1, 2, 3]
+            },
+            mqa: {
+                badge: "Collapsed Multi-Query Allocation Strategy",
+                title: "MQA: Maximum Channel Compression",
+                desc: "All Query pathways merge into a single shared Key-Value register.",
+                compression: "8x FOOTPRINT COMPRESSION SAVED",
+                compressionColor: "text-cyan-400 bg-cyan-950 border-cyan-900",
+                narrative: "<strong>Multi-Query Attention (MQA)</strong> represents an aggressive optimization step. It collapses all unique Key and Value heads into a single, shared structural channel. All 4 Query channels route data onto this single target block. This drastically cuts the memory size down, but it can limit the model's ability to capture complex, multi-layered sentence relationships.",
+                latex: "\\text{Memory}_{\\text{MQA}} = 2 \\times \\text{Layers} \\times \\text{Precision} \\times \\text{SeqLen} \\times 1 \\times d_k",
+                kvCells: [
+                    { label: "Shared KV Pair 0", class: "kv-highlight" }
+                ],
+                highlights: [0, 0, 0, 0] // Map all to index 0
+            },
+            gqa: {
+                badge: "Grouped-Query Production Framework Configuration",
+                title: "GQA: The Golden Architectural Optimization",
+                desc: "Queries group into clean blocks to map to a scaled pool of Key-Value channels.",
+                compression: "4x BALANCED MEMORY OPTIMIZATION",
+                compressionColor: "text-emerald-400 bg-emerald-950 border-emerald-900",
+                narrative: "<strong>Grouped-Query Attention (GQA)</strong> provides the ideal trade-off. It divides Query heads into uniform sub-groups. In this 4-head example, Query Heads 0-1 form Group A and route to KV Pair 0, while Query Heads 2-3 form Group B and route to KV Pair 1. This matches the speed and efficiency of MQA while retaining nearly the full accuracy of dense MHA models.",
+                latex: "\\text{Memory}_{\\text{GQA}} = 2 \\times \\text{Layers} \\times \\text{Precision} \\times \\text{SeqLen} \\times G_{\\text{groups}} \\times d_k",
+                kvCells: [
+                    { label: "Shared KV Pair 0", class: "kv-highlight" },
+                    { label: "Shared KV Pair 1", class: "kv-highlight" }
+                ],
+                highlights: [0, 0, 1, 1] // Grouped assignments
+            }
+        };
+
+        function setAttentionLayout(modeKey) {
+            const data = attentionConfigs[modeKey];
+
+            // Adjust navigation active button style treatments
+            ['mha', 'mqa', 'gqa'].forEach(k => {
+                const btn = document.getElementById(`btn-${k}`);
+                if (k === modeKey) {
+                    btn.className = "px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 bg-slate-800 text-white border border-slate-700 shadow-md";
+                } else {
+                    btn.className = "px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 text-slate-500 hover:text-slate-300";
+                }
+            });
+
+            // Update text logs metadata
+            document.getElementById('strategy-badge').innerText = data.badge;
+            document.getElementById('strategy-title').innerText = data.title;
+            document.getElementById('strategy-desc').innerText = data.desc;
+            document.getElementById('narrative-box').innerHTML = data.narrative;
+
+            const compBadge = document.getElementById('compression-badge');
+            compBadge.innerText = data.compression;
+            compBadge.className = `text-[9px] font-mono px-1.5 py-0.5 rounded border font-bold ${data.compressionColor}`;
+
+            // Build out KV columns layout grids elements dynamically
+            const kvColumn = document.getElementById('kv-heads-column');
+            kvColumn.innerHTML = '<span class="text-[9px] text-slate-500 text-center uppercase block">Keys/Values ($KV$)</span>';
+
+            data.kvCells.forEach((cell, idx) => {
+                const div = document.createElement('div');
+                div.id = `kv-head-node-${idx}`;
+                div.className = `px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-400 text-center w-36 head-node ${cell.class}`;
+                div.innerText = cell.label;
+                kvColumn.appendChild(div);
+            });
+
+            // Apply interactive hover highlight focus synchronizations onto visual column layout nodes
+            for (let i = 0; i < 4; i++) {
+                const qNode = document.getElementById(`q-head-${i}`);
+                // Clear any legacy focus classes structures
+                qNode.className = "px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-400 text-center w-28 head-node";
+                
+                // Establish mouse hover listeners hooks
+                qNode.onmouseenter = () => {
+                    qNode.className = "px-3 py-1.5 border rounded text-center w-28 head-node head-highlight";
+                    const targetKvIndex = data.highlights[i];
+                    const targetKvNode = document.getElementById(`kv-head-node-${targetKvIndex}`);
+                    if(targetKvNode) targetKvNode.className = "px-3 py-1.5 border rounded text-center w-36 head-node kv-highlight text-white font-bold";
+                };
+
+                qNode.onmouseleave = () => {
+                    qNode.className = "px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-400 text-center w-28 head-node";
+                    const targetKvIndex = data.highlights[i];
+                    const targetKvNode = document.getElementById(`kv-head-node-${targetKvIndex}`);
+                    if(targetKvNode) targetKvNode.className = "px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-400 text-center w-36 head-node";
+                };
+            }
+
+            // Update LaTeX formula blocks tracking string matrix frames safely using double backslashes
+            document.getElementById('latex-box').innerText = `$$${data.latex}$$`;
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        // Initialize application setups loops on window ready completions
+        window.onload = () => {
+            setAttentionLayout('gqa');
+        }
+    </script>
+</body>
+</html>

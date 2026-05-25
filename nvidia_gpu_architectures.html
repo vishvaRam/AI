@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NVIDIA GPU Architectures & Data Types Blueprint</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght=300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        .arch-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .arch-active { border-color: #10b981 !important; background: rgba(16, 185, 129, 0.1) !important; box-shadow: 0 0 15px rgba(16, 185, 129, 0.25); }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-emerald-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-lg text-slate-950">
+                    <i class="fa-solid fa-microchip text-xl text-slate-950"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">NVIDIA GPU Compute Architectures Dashboard</span>
+                    <span class="text-xs text-slate-400 block font-mono">Visualizing Tensor Core Generations, Compute Capabilities, and Native Numerical Precision Layers</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-emerald-400 font-bold">
+                NVIDIA CUDA Core Matrix
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-2xl font-black text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-circle-nodes text-emerald-400"></i> Numerical Precision Evolution in Hardware
+            </h2>
+            <p class="text-slate-400 text-sm leading-relaxed mb-4">
+                As Large Language Models scale to hundreds of billions of parameters, hardware computation boundaries must adapt. Standard 32-bit floats provide extreme precision but clog memory lanes. Modern compute architectures focus on mixed-precision scaling—introducing specialized micro-formats like TF32, mixed FP8, and compressed FP4 to multiply deep-learning training and inference velocities while preserving reasoning boundaries.
+            </p>
+            
+            <div class="overflow-x-auto custom-scrollbar mt-4">
+                <table class="w-full text-left border-collapse text-xs font-mono">
+                    <thead>
+                        <tr class="border-b border-slate-800 bg-slate-950 text-slate-400">
+                            <th class="p-3">Architecture</th>
+                            <th class="p-3">Compute Capability</th>
+                            <th class="p-3">Flagship GPU</th>
+                            <th class="p-3">Tensor Core Generation</th>
+                            <th class="p-3">Key Native Dtypes Supported</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/60 text-slate-300">
+                        <tr>
+                            <td class="p-3 font-bold text-purple-400">Volta</td>
+                            <td class="p-3">sm_70</td>
+                            <td class="p-3 text-slate-400">V100</td>
+                            <td class="p-3">1st Gen</td>
+                            <td class="p-3 text-slate-400">FP32, FP16, INT8, INT4</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 font-bold text-cyan-400">Ampere</td>
+                            <td class="p-3">sm_80 / sm_86</td>
+                            <td class="p-3 text-slate-400">A100 / RTX 3090</td>
+                            <td class="p-3 text-cyan-400">3rd Gen</td>
+                            <td class="p-3 text-emerald-400 font-bold">TF32, BF16, FP16, INT8, INT4</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 font-bold text-amber-400">Ada Lovelace</td>
+                            <td class="p-3">sm_89</td>
+                            <td class="p-3 text-slate-400">RTX 4090 / L40S</td>
+                            <td class="p-3 text-amber-400">4th Gen</td>
+                            <td class="p-3 text-emerald-400 font-bold">FP8 (E4M3, E5M2), BF16, FP16, INT8</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 font-bold text-emerald-400">Hopper</td>
+                            <td class="p-3">sm_90</td>
+                            <td class="p-3 text-slate-400">H100 / H200</td>
+                            <td class="p-3 text-emerald-400">4th Gen (TE Engine)</td>
+                            <td class="p-3 text-emerald-400 font-bold">FP8 (Fused TE), BF16, FP16, TF32, INT8</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 font-bold text-rose-400">Blackwell</td>
+                            <td class="p-3">sm_100</td>
+                            <td class="p-3 text-slate-400">B100 / B200 / GB200</td>
+                            <td class="p-3 text-rose-400">5th Gen (TE Gen 2)</td>
+                            <td class="p-3 text-rose-400 font-bold">FP4, FP8, BF16, FP16, TF32, INT8</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <div class="lg:col-span-5 flex flex-col gap-3" id="arch-cards-stack">
+                </div>
+
+            <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" id="console-pulse"></span>
+                            <h3 class="text-sm font-bold tracking-wide text-white uppercase font-mono">Microarchitecture Diagnostic Output</h3>
+                        </div>
+                        <span id="capability-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 text-emerald-400 border border-emerald-900/40 font-bold">COMPUTE ARCH</span>
+                    </div>
+
+                    <div id="narrative-box" class="text-xs text-slate-300 leading-relaxed mb-6">
+                        Select a microarchitecture generation card to run memory feature scans...
+                    </div>
+                </div>
+
+                <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                    <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                        <span><i class="fa-solid fa-square-root-variable text-emerald-400 mr-1.5" id="math-icon"></i> floating_point_bit_structure.tex</span>
+                        <span class="text-slate-500 uppercase font-bold text-[9px]">Bit Allocations</span>
+                    </div>
+                    <div class="p-4 text-center bg-black min-h-[65px] flex items-center justify-center text-xs text-emerald-400" id="latex-box">
+                        $$\text{Precision Format Breakdown}$$
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        NVIDIA Hardware Architecture Numerical Specification Matrix Database Map
+    </footer>
+
+    <script>
+        const architectureDatabase = [
+            {
+                name: "Ampere Generation (A100)",
+                capability: "Compute sm_80",
+                summary: "Introduced native BF16 training stability and TF32 shortcuts.",
+                narrative: "The <strong>Ampere Architecture (A100)</strong> solved the long-standing stability issues of deep learning precision. It introduced native <strong>Bfloat16 (BF16)</strong>, which copies the massive exponent dynamic range of full FP32 to prevent gradient underflow without manual loss-scaling scripts. It also introduced <strong>TensorFloat-32 (TF32)</strong>, allowing Tensor Cores to read standard FP32 data format, execute internal matrix processing at reduced bits, and output FP32 seamlessly for accelerated speeds.",
+                latex: "\\text{BF16 Structure: } 1 \\text{ Sign bit} + 8 \\text{ Exponent bits} + 7 \\text{ Mantissa bits} = 16\\text{-bit Boundaries}",
+                color: "text-cyan-400",
+                pulse: "w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"
+            },
+            {
+                name: "Hopper Generation (H100)",
+                summary: "Integrated a dedicated FP8 Transformer Engine for optimized serving.",
+                narrative: "The <strong>Hopper Architecture (H100)</strong> brought a massive hardware acceleration jump via the **Transformer Engine (TE)**. Hopper runs native, mixed-precision <strong>FP8 scaling channels</strong>. It dynamically evaluates matrix values layer-by-layer: deploying the high-precision $E4M3$ bit structure for forward passes to preserve accuracy, and switching to the wide-range $E5M2$ bit layout for backpropagation loops to absorb gradient spikes.",
+                latex: "\\text{FP8 E4M3: } 1\\text{S} + 4\\text{E} + 3\\text{M} \\quad \\parallel \\quad \\text{FP8 E5M2: } 1\\text{S} + 5\\text{E} + 2\\text{M}",
+                color: "text-emerald-400",
+                pulse: "w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"
+            },
+            {
+                name: "Blackwell Generation (B200)",
+                summary: "Features second-generation Transformer Engines supporting compressed FP4 precision.",
+                narrative: "The cutting-edge <strong>Blackwell Architecture (B200)</strong> maximizes low-bit computation boundaries. It features a second-generation Transformer Engine that adds native **FP4 precision** support. By pairing this ultra-compressed data type with specialized micro-scaling formats, Blackwell speeds up inference processing arrays dramatically over compressed checkpoints while keeping reasoning losses near zero.",
+                latex: "\\text{FP4 Execution Path: } 1 \\text{ Sign bit} + 2 \\text{ Exponent bits} + 1 \\text{ Mantissa bit} = 4\\text{-bit Silicon Channels}",
+                color: "text-rose-400",
+                pulse: "w-2.5 h-2.5 rounded-full bg-rose-400 animate-pulse"
+            }
+        ];
+
+        function buildArchitectureHub() {
+            const container = document.getElementById('arch-cards-stack');
+            container.innerHTML = '';
+
+            architectureDatabase.forEach((arch, idx) => {
+                const btn = document.createElement('button');
+                btn.id = `arch-step-node-${idx}`;
+                btn.onclick = () => activateArchitectureTrace(idx);
+                btn.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+                
+                btn.innerHTML = `
+                    <div class="flex items-center justify-between w-full">
+                        <span class="font-bold text-xs text-white tracking-wide uppercase font-mono">${arch.name}</span>
+                        <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
+                    </div>
+                    <p class="text-xs leading-normal font-medium text-slate-400">${arch.summary}</p>
+                `;
+                container.appendChild(btn);
+            });
+        }
+
+        function activateArchitectureTrace(idx) {
+            const data = architectureDatabase[idx];
+
+            architectureDatabase.forEach((_, stepIdx) => {
+                const node = document.getElementById(`arch-step-node-${stepIdx}`);
+                if(node) node.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+            });
+
+            const activeBtn = document.getElementById(`arch-step-node-${idx}`);
+            if(activeBtn) {
+                // Apply visual border adjustments matching generational color treatments
+                if(idx === 0) activeBtn.className = "w-full text-left p-4 rounded-xl bg-slate-800/80 border border-cyan-400 text-cyan-400 transition-all flex flex-col gap-1";
+                if(idx === 1) activeBtn.className = "w-full text-left p-4 rounded-xl bg-slate-800/80 border border-emerald-400 text-emerald-400 transition-all flex flex-col gap-1";
+                if(idx === 2) activeBtn.className = "w-full text-left p-4 rounded-xl bg-slate-800/80 border border-rose-400 text-rose-400 transition-all flex flex-col gap-1";
+            }
+
+            // Sync diagnostic readouts text metrics
+            document.getElementById('capability-badge').innerText = data.capability;
+            document.getElementById('narrative-box').innerHTML = data.narrative;
+            document.getElementById('console-pulse').className = data.pulse;
+            
+            document.getElementById('math-icon').className = `fa-solid fa-square-root-variable mr-1.5 ${data.color}`;
+
+            // Render tailored LaTeX bit layout structures using double backslashes to avoid parsing bugs
+            document.getElementById('latex-box').innerText = `$$${data.latex}$$`;
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        // Run dashboard engine setup on window loading completions
+        window.onload = () => {
+            buildArchitectureHub();
+            activateArchitectureTrace(1); // Default focus centered over Hopper
+        }
+    </script>
+</body>
+</html>

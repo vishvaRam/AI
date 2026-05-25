@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RoPE Scaling & YaRN Context Window Extender</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' },
+                        emerald: { 400: '#34d399', 500: '#10b981' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        .freq-node { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .freq-interpolated { border-color: #a855f7 !important; background: rgba(168, 85, 247, 0.15) !important; color: #c084fc !important; box-shadow: 0 0 12px rgba(168, 85, 247, 0.2); }
+        .freq-intact { border-color: #22d3ee !important; background: rgba(34, 211, 238, 0.15) !important; color: #22d3ee !important; font-weight: bold; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-purple-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-purple-500 to-cyan-500 rounded-lg">
+                    <i class="fa-solid fa-bezier-curve text-xl text-slate-950"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">LLM Context Window Expansion Layer</span>
+                    <span class="text-xs text-slate-400 block font-mono">Visualizing Rotary Positional Frequency Interpolation, NTK Scaling, and YaRN Mechanics</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-purple-400 font-bold">
+                YaRN Window Extension
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-2xl font-black text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-circle-question text-purple-400"></i> Why Vanilla RoPE Fails at Long Context
+            </h2>
+            <p class="text-slate-400 text-sm leading-relaxed mb-6">
+                Rotary Positional Embeddings (RoPE) represent positions as complex rotational vectors. If an LLM pre-trained on 4K context receives a 32K token stream, its low-frequency dimensions rotate beyond recognized mathematical distributions, blinding the attention matrix. **YaRN (Yet Another RoPE extensioN)** solves this by partition-scaling waves dynamically depending on their target frequency channels.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-cyan-400 mb-1">High-Frequency Bands</h3>
+                    <p class="text-slate-400 leading-relaxed">Waves that govern precise, close-range local tokens relationships. YaRN isolates these channels and **leaves them completely un-interpolated**, ensuring the model preserves its exact near-neighbor semantic resolution.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-purple-400 mb-1">Low-Frequency Bands</h3>
+                    <p class="text-slate-400 leading-relaxed">Waves that track macro-level, long-range global context patterns. YaRN applies a smooth **linear compression scale** to these tracks, pulling extreme out-of-bounds angles back down into known territories.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-emerald-400 mb-1">Entropy Scale Correction</h3>
+                    <p class="text-slate-400 leading-relaxed">Expanding context spreads attention probabilities over thousands of additional choices, diluting core values. YaRN calculates a specialized scale multiplier ($t$) to recalibrate attention weights, keeping response coherence stable.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <div class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
+                <div>
+                    <h3 class="text-sm font-bold tracking-wide text-white uppercase font-mono border-b border-slate-800 pb-2 mb-4">
+                        <i class="fa-solid fa-sliders text-cyan-400 mr-1.5"></i> 1. Frequency Band Profiler
+                    </h3>
+                    <p class="text-xs text-slate-400 leading-relaxed mb-6">
+                        Toggle between standard linear extensions and advanced YaRN. Observe how YaRN divides optimization tasks, treating narrow local waves and wide global waves differently.
+                    </p>
+
+                    <div class="space-y-4">
+                        <div>
+                            <span class="text-[11px] font-mono text-slate-500 uppercase block mb-2">Select Interpolation Engine</span>
+                            <div class="grid grid-cols-2 gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                                <button onclick="setRopeMode('linear')" id="btn-rope-linear" class="py-2 px-3 text-xs font-bold rounded-lg transition-all duration-200 text-slate-400 hover:text-white">
+                                    Linear Stretch
+                                </button>
+                                <button onclick="setRopeMode('yarn')" id="btn-rope-yarn" class="py-2 px-3 text-xs font-bold rounded-lg transition-all duration-200 bg-purple-500 text-slate-950 shadow-md">
+                                    YaRN Engine
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 mt-6 text-xs text-slate-400 space-y-1">
+                    <span class="text-white block uppercase font-mono tracking-wider font-semibold text-[10px] text-purple-400">💡 Context Scaling Factor ($s=8$)</span>
+                    <p class="margin-0 leading-normal" id="sandbox-explainer">
+                        YaRN dynamically redistributes attention entropy weights to prevent language breakdown across long context extensions.
+                    </p>
+                </div>
+            </div>
+
+            <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-purple-500 animate-pulse" id="console-pulse"></span>
+                            <h3 class="text-sm font-bold tracking-wide text-white uppercase font-mono">Rotational Wave Frequency Map</h3>
+                        </div>
+                        <span id="step-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">SCALE BOUNDS ACTIVE</span>
+                    </div>
+
+                    <div class="space-y-3 mb-4 font-mono text-xs">
+                        <span class="text-[9px] text-slate-500 uppercase block tracking-wider font-bold">Rotary Positional Channels Dimensions ($\omega_d$)</span>
+                        <div class="grid grid-cols-2 gap-2 text-center">
+                            <div id="freq-block-high" class="p-3 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 freq-node">
+                                <strong>High-Freq Channels</strong><br><span class="text-[10px] opacity-70" id="high-status">Processing</span>
+                            </div>
+                            <div id="freq-block-low" class="p-3 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 freq-node">
+                                <strong>Low-Freq Channels</strong><br><span class="text-[10px] opacity-70" id="low-status">Processing</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="narrative-box" class="text-xs text-slate-300 leading-relaxed mb-4">
+                        Isolating specific multi-scale wave parameters...
+                    </div>
+                </div>
+
+                <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                    <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                        <span><i class="fa-solid fa-square-root-variable text-purple-400 mr-1.5"></i> positional_frequency_scale.tex</span>
+                        <span class="text-slate-500 uppercase font-bold text-[9px]">RoPE Multi-scale</span>
+                    </div>
+                    <div class="p-4 text-center bg-black min-h-[65px] flex items-center justify-center text-xs text-purple-300" id="latex-box">
+                        $$\omega'_d = inv\_freq(\omega_d, s)$$
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        LLM RoPE Frequency Extension Scaling Simulation Framework Map
+    </footer>
+
+    <script>
+        let ropeMode = 'yarn';
+
+        const ropeConfigs = {
+            linear: {
+                badge: "Uniform Linear Context Extension",
+                narrative: "<strong>Linear Scaling</strong> applies a completely uniform stretching factor across all rotary frequencies. While it successfully compresses long-range low waves, it accidentally stretches high-frequency channels as well. This distorts short-range neighbor dependencies and degrades the model's immediate token-to-token conversational grammar accuracy.",
+                latex: "\\omega'_d = \\frac{1}{s} \\cdot \\omega_d = \\frac{1}{s} \\cdot 10000^{-2d/c}",
+                explainer: "Linear stretching blurs fine-grained local text structures by uniformly scaling high-frequency positional channels.",
+                pulseClass: "w-2 h-2 rounded-full bg-cyan-400 animate-pulse",
+                highTxt: "Stretched / Distorted",
+                lowTxt: "Stretched / Scaled"
+            },
+            yarn: {
+                badge: "YaRN: Multi-Scale Frequency Interpolation",
+                narrative: "<strong>YaRN (Yet Another RoPE extensioN)</strong> splits the rotary dimensions into distinct frequency bands. High-frequency dimensions are left entirely intact to protect immediate word structure, while long-range low frequencies are smoothly compressed to absorb thousands of remote context variables without destabilizing attention paths.",
+                latex: "\\omega'_d = (1-\\alpha)\\omega_d + \\alpha\\frac{\\omega_d}{s}, \\quad \\text{where } \\alpha \\text{ interpolates smoothly across smooth bounds}",
+                explainer: "YaRN leaves high-frequency channels intact to protect local details, while scaling low-frequency bands to expand long-range memory.",
+                pulseClass: "w-2 h-2 rounded-full bg-purple-400 animate-pulse",
+                highTxt: "Intact / Pristine",
+                lowTxt: "Interpolated / Compressed"
+            }
+        };
+
+        function setRopeMode(modeKey) {
+            ropeMode = modeKey;
+            const data = ropeConfigs[modeKey];
+
+            // Update navigation control toggles active styling
+            const btnLinear = document.getElementById('btn-rope-linear');
+            const btnYarn = document.getElementById('btn-rope-yarn');
+            if (modeKey === 'linear') {
+                btnLinear.className = "py-2 px-3 text-xs font-bold rounded-lg transition-all duration-200 bg-cyan-500 text-slate-950 shadow-md";
+                btnYarn.className = "py-2 px-3 text-xs font-bold rounded-lg transition-all duration-200 text-slate-400 hover:text-white";
+            } else {
+                btnYarn.className = "py-2 px-3 text-xs font-bold rounded-lg transition-all duration-200 bg-purple-500 text-slate-950 shadow-md";
+                btnLinear.className = "py-2 px-3 text-xs font-bold rounded-lg transition-all duration-200 text-slate-400 hover:text-white";
+            }
+
+            // Sync document logs and visual readouts text parameters
+            document.getElementById('step-badge').innerText = data.badge;
+            document.getElementById('narrative-box').innerHTML = data.narrative;
+            document.getElementById('sandbox-explainer').innerText = data.explainer;
+            document.getElementById('console-pulse').className = data.pulseClass;
+
+            document.getElementById('high-status').innerText = data.highTxt;
+            document.getElementById('low-status').innerText = data.lowTxt;
+
+            // Normalize layout blocks classes configurations
+            const highBlock = document.getElementById('freq-block-high');
+            const lowBlock = document.getElementById('freq-block-low');
+            highBlock.className = "p-3 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 freq-node";
+            lowBlock.className = "p-3 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 freq-node";
+
+            // Trigger accent color treatments matching configuration states
+            if (modeKey === 'linear') {
+                highBlock.className += " border-cyan-400 text-cyan-400/90 bg-cyan-950/10";
+                lowBlock.className += " border-cyan-400 text-cyan-400/90 bg-cyan-950/10";
+            } else {
+                highBlock.className += " freq-intact";
+                lowBlock.className += " freq-interpolated";
+            }
+
+            // Push fresh latex equation tracks down and prompt compiler parsing pass using double backslashes safely
+            document.getElementById('latex-box').innerText = `$$${data.latex}$$`;
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        // Boot default application initialization sequence rules on window ready
+        window.onload = () => {
+            setRopeMode('yarn');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlashAttention Hardware-Level Deep Dive</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght=300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        /* Memory Block States */
+        .mem-node { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .sram-active { border-color: #22d3ee !important; background: rgba(34, 211, 238, 0.15) !important; box-shadow: 0 0 15px rgba(34, 211, 238, 0.3); }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-cyan-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-lg">
+                    <i class="fa-solid fa-bolt text-xl text-slate-950"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">FlashAttention Hardware Memory Flow Engine</span>
+                    <span class="text-xs text-slate-400 block font-mono">Visualizing IO-Aware Tiling, SRAM Caching, and Online Softmax Recalculation</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-cyan-400 font-bold">
+                GPU Kernel IO-Bound Optimization
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-2xl font-black text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-server text-cyan-400"></i> The Memory Wall: Why Attention Throttles Your GPU
+            </h2>
+            <p class="text-slate-400 text-sm leading-relaxed mb-6">
+                Standard attention bottlenecks hardware not because of math limits, but because it is <strong>IO-Bound (Input/Output bound)</strong>. The GPU spends most of its time waiting for the massive $N \times N$ attention matrix to travel between slow, high-capacity High Bandwidth Memory (HBM/VRAM) and tiny, ultra-fast on-chip SRAM cache registers. <strong>FlashAttention</strong> solves this with an IO-aware tiling framework.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-cyan-400 mb-1">1. Block Tiling</h3>
+                    <p class="text-slate-400 leading-relaxed">Instead of computing the whole context sequence at once, FlashAttention loads small data blocks of Queries ($Q$), Keys ($K$), and Values ($V$) into the GPU's fast on-chip SRAM cache, computing attention step-by-step in closed blocks.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-purple-400 mb-1">2. Online Softmax</h3>
+                    <p class="text-slate-400 leading-relaxed">Softmax requires the global maximum value to stabilize denominators. To run this over independent blocks without compiling the full matrix, FlashAttention tracks and dynamically scales localized softmax statistics on the fly.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-emerald-400 mb-1">3. Gradient Recomputation</h3>
+                    <p class="text-slate-400 leading-relaxed">Standard attention stores the massive $N \times N$ matrix in VRAM for the backward pass. FlashAttention discards it entirely. During the backward pass, it instantly reconstructs block segments inside SRAM from saved scaling factors, saving up to 10x VRAM.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+            <div class="mb-4">
+                <span class="text-[10px] uppercase font-mono tracking-widest font-bold px-2 py-0.5 rounded border border-slate-700 text-slate-400 bg-slate-950">Hardware Simulation Terminal</span>
+                <h2 class="text-2xl font-black text-white mt-1">SRAM Block Tracking Control</h2>
+                <p class="text-slate-400 text-sm mt-0.5">Click through the algorithm steps below to trace tensor blocks moving between High Bandwidth Memory (HBM) and internal SRAM cache.</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                <div class="lg:col-span-5 flex flex-col gap-3" id="step-controls-stack">
+                    </div>
+
+                <div class="lg:col-span-7 bg-slate-950 border border-slate-800 rounded-xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                            <span class="text-xs font-bold tracking-wide text-white uppercase font-mono">GPU Chip Architecture Space</span>
+                            <span id="step-counter-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">Step 1</span>
+                        </div>
+                        
+                        <div class="space-y-4 mb-4">
+                            <div class="p-3 bg-slate-900/50 border border-slate-800 rounded-xl text-center">
+                                <span class="text-[9px] font-mono text-slate-500 uppercase block mb-1">High Bandwidth Memory (HBM / VRAM) [Slow, Big]</span>
+                                <div class="flex justify-center gap-2 font-mono text-[10px]">
+                                    <div class="px-2 py-1 bg-black border border-slate-800 rounded text-slate-400">Tensor $Q$</div>
+                                    <div class="px-2 py-1 bg-black border border-slate-800 rounded text-slate-400">Tensor $K$</div>
+                                    <div class="px-2 py-1 bg-black border border-slate-800 rounded text-slate-400">Tensor $V$</div>
+                                    <div id="hbm-matrix-node" class="px-2 py-1 bg-red-950/20 border border-red-900/40 rounded text-red-500/70 line-through">Matrix $N \times N$</div>
+                                </div>
+                            </div>
+
+                            <div class="text-center text-slate-700 text-xs py-0.5 flex justify-center items-center gap-4">
+                                <i class="fa-solid fa-arrow-down-up-lock"></i>
+                                <span id="bus-traffic-txt" class="text-[10px] font-mono uppercase tracking-wider text-slate-500">Idle Memory Bus</span>
+                                <i class="fa-solid fa-arrow-down-up-lock"></i>
+                            </div>
+
+                            <div class="p-3 bg-slate-900/50 border border-slate-800 rounded-xl text-center">
+                                <span class="text-[9px] font-mono text-slate-500 uppercase block mb-1">On-Chip SRAM Cache Registers [Ultra-Fast, Small]</span>
+                                <div class="flex justify-center gap-2 font-mono text-[11px]">
+                                    <div id="sram-q-tile" class="px-3 py-1.5 bg-black border border-slate-800 rounded text-slate-500 mem-node">Tile $Q_i$</div>
+                                    <div id="sram-k-tile" class="px-3 py-1.5 bg-black border border-slate-800 rounded text-slate-500 mem-node">Tile $K_j$</div>
+                                    <div id="sram-v-tile" class="px-3 py-1.5 bg-black border border-slate-800 rounded text-slate-500 mem-node">Tile $V_j$</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="narrative-box" class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Select a pipeline operation step to trace memory bandwidth allocations...
+                        </div>
+                    </div>
+
+                    <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                        <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                            <span><i class="fa-solid fa-square-root-variable text-cyan-400 mr-1.5"></i> online_softmax_rescaling.tex</span>
+                            <span class="text-slate-500 uppercase font-bold text-[9px]">Tiling Math</span>
+                        </div>
+                        <div class="p-4 text-center bg-black min-h-[60px] flex items-center justify-center text-xs text-cyan-400" id="latex-box">
+                            $$\text{Equation Frame}$$
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        FlashAttention Core Hardware Kernel Optimization Map
+    </footer>
+
+    <script>
+        const flashPipeline = [
+            {
+                title: "1. Block Tiling Parameter Allocation",
+                summary: "Determine target block sizes based on available on-chip SRAM space.",
+                narrative: "Before executing calculations, FlashAttention queries hardware boundaries. It determines maximum block size limits ($B_c, B_r$) tailored to fit perfectly into the GPU's fast on-chip <strong>SRAM Cache</strong>. It prepares to slice the sequence footprint into discrete tracking tiles.",
+                latex: "B_c = \\lfloor \\frac{\\text{SRAM Size}}{4d} \\rfloor, \\quad B_r = \\lfloor \\frac{\\text{SRAM Size}}{4d} \\rfloor",
+                badge: "KERNEL INITIALIZATION STEP",
+                highlightTiles: [],
+                bus: "System Configuration Cache Scan"
+            },
+            {
+                title: "2. Streaming Key-Value Chunks into SRAM",
+                summary: "Stream block segments of Key and Value vectors directly from slow VRAM.",
+                narrative: "The loop worker initiates processing. It pulls a tile segment of the Key matrix ($K_j$) and Value matrix ($V_j$) from high-latency <strong>High Bandwidth Memory (HBM)</strong>, streaming it straight onto the fast on-chip registers. The memory bus transfers only tiny block segments instead of full sequences.",
+                latex: "K_j \\in \\mathbb{R}^{B_c \\times d}, \\quad V_j \\in \\mathbb{R}^{B_c \\times d} \\quad \\rightarrow \\quad \\text{Cached to SRAM}",
+                badge: "HBM TO SRAM CORE BLOCK STREAM",
+                highlightTiles: ["k", "v"],
+                bus: "READ BUS PASS: LOADING K_j & V_j TILES"
+            },
+            {
+                title: "3. Localized Inner Product Computation",
+                summary: "Load Query blocks to evaluate attention matrix products inside SRAM.",
+                narrative: "Next, a corresponding block of Query vectors ($Q_i$) is loaded into SRAM. The GPU computes a localized dot-product matrix tile ($S_{ij} = Q_i K_j^T$) entirely within the ultra-fast on-chip cache registers. Crucially, **the resulting intermediate matrix tile is never written back to VRAM**.",
+                latex: "S_{ij} = Q_i K_j^T \\in \\mathbb{R}^{B_r \\times B_c}",
+                badge: "ON-CHIP SRAM INNER PRODUCT MATRIX MATMUL",
+                highlightTiles: ["q", "k"],
+                bus: "INNER COMPUTATION PASS: LOCKED TO REGISTER"
+            },
+            {
+                title: "4. Online Softmax Dynamic Correction",
+                summary: "Update and scale local softmax statistics on the fly without a full matrix view.",
+                narrative: "To calculate accurate softmax without loading the full context sequence, FlashAttention tracks running statistical variables: the localized maximum value ($m_{\\text{new}}$) and denominator scale weights ($f_{\\text{new}}$). When a new block updates, it applies rescaling factors to patch past entries smoothly on the fly.",
+                latex: "m_{\\text{new}} = \\max(m_{\\text{old}}, m_{ij}), \\quad O_{\\text{new}} = e^{m_{\\text{old}} - m_{\\text{new}}} O_{\\text{old}} + e^{S_{ij} - m_{\\text{new}}} V_j",
+                badge: "RECURRENT ONLINE SOFTMAX ADJUSTMENT",
+                highlightTiles: ["q", "k", "v"],
+                bus: "RESCALE PASS: STATISTICS UPDATED ON REGISTER"
+            },
+            {
+                title: "5. Context Vector Output Write-Back",
+                summary: "Write the final context-aware output vector directly back to VRAM.",
+                narrative: "Once row-wise block iterations finish looping across columns, the finalized context-aware vector ($O_i$) is written back to HBM. FlashAttention finishes computing exact attention paths while keeping memory read/write cycles flat, yielding **speeds up to 2x-4x faster** than vanilla implementations.",
+                latex: "O_i = \\text{Writeback to HBM}, \\quad \\text{Matrix } N \\times N \\text{ Footprint} = 0",
+                badge: "HBM UPDATE WRITEBACK PASS",
+                highlightTiles: [],
+                bus: "WRITE BUS PASS: COMMIT FINAL COMPILATION OUT"
+            }
+        ];
+
+        function buildPipelineControls() {
+            const container = document.getElementById('step-controls-stack');
+            container.innerHTML = '';
+
+            flashPipeline.forEach((step, idx) => {
+                const btn = document.createElement('button');
+                btn.id = `flash-step-node-${idx}`;
+                btn.onclick = () => runFlashTrace(idx);
+                btn.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+                
+                btn.innerHTML = `
+                    <div class="flex items-center justify-between w-full">
+                        <span class="font-bold text-xs text-white tracking-wide uppercase font-mono">${step.title}</span>
+                        <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
+                    </div>
+                    <p class="text-xs leading-normal font-medium text-slate-400">${step.summary}</p>
+                `;
+                container.appendChild(btn);
+            });
+        }
+
+        function runFlashTrace(stepIdx) {
+            const data = flashPipeline[stepIdx];
+
+            flashPipeline.forEach((_, idx) => {
+                const buttonElement = document.getElementById(`flash-step-node-${idx}`);
+                if(buttonElement) buttonElement.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+            });
+
+            const activeBtn = document.getElementById(`flash-step-node-${stepIdx}`);
+            if(activeBtn) {
+                activeBtn.className = "w-full text-left p-4 rounded-xl bg-slate-800/80 border border-cyan-400 text-cyan-400 transition-all duration-200 flex flex-col gap-1";
+            }
+
+            // Sync structural console text layouts fields
+            document.getElementById('step-counter-badge').innerText = data.badge;
+            document.getElementById('narrative-box').innerHTML = data.narrative;
+            document.getElementById('bus-traffic-txt').innerText = data.bus;
+            
+            const busTxtNode = document.getElementById('bus-traffic-txt');
+            if(stepIdx === 0 || stepIdx === 4) {
+                busTxtNode.className = "text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold";
+            } else {
+                busTxtNode.className = "text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold animate-pulse";
+            }
+
+            // Normalize internal hardware graphics component boxes style indicators
+            const tilesKeys = ['q', 'k', 'v'];
+            tilesKeys.forEach(k => {
+                const targetNode = document.getElementById(`sram-${k}-tile`);
+                targetNode.className = "px-3 py-1.5 bg-black border border-slate-800 rounded text-slate-600 mem-node";
+            });
+
+            // Active cell highlights triggers
+            data.highlightTiles.forEach(k => {
+                const targetNode = document.getElementById(`sram-${k}-tile`);
+                targetNode.className = "px-3 py-1.5 border rounded mem-node sram-active font-bold text-white";
+            });
+
+            // Inject LaTeX math expressions and prompt compiler formatting cycle pass
+            document.getElementById('latex-box').innerText = `$$${data.latex}$$`;
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        // Trigger startup init processes on system compilation
+        window.onload = () => {
+            buildPipelineControls();
+            runFlashTrace(0);
+        }
+    </script>
+</body>
+</html>

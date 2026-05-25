@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AdamW Optimizer Deep Dive: Architecture Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-purple-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-purple-500 to-cyan-500 rounded-lg">
+                    <i class="fa-solid fa-gauge-high text-xl text-slate-950"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">AdamW Fine-Tuning Optimization Core</span>
+                    <span class="text-xs text-slate-400 block font-mono">Visualizing Decoupled Weight Decay, Adaptive Learning Rates, and Momentum Tracking</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-purple-400 font-bold">
+                AdamW Engine Block
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-2xl font-black text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-circle-nodes text-purple-400"></i> The Three Pillars of AdamW
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm mt-4">
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-purple-400 mb-1">1st Moment: Momentum ($m_t$)</h3>
+                    <p class="text-slate-400 leading-relaxed">Tracks the running directional history of gradients. It averages past updates so that if an LLM parameter hits a temporary noise spike or a local flat spot on the loss surface, it keeps gliding down the main slope safely.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-cyan-400 mb-1">2nd Moment: Scaling Variance ($v_t$)</h3>
+                    <p class="text-slate-400 leading-relaxed">Tracks the historical variance of squared gradients. AdamW divides the step by $\sqrt{v_t}$, automatically damping down highly volatile, overactive parameters while boosting step limits for rare, slow-moving attention vectors.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-emerald-400 mb-1">Decoupled Weight Decay ($\lambda$)</h3>
+                    <p class="text-slate-400 leading-relaxed">The defining upgrade of AdamW. Instead of mixing regularizing weight decay directly inside the moving averages (which warps the historical scaling vectors), AdamW subtracts decay independently on a separate track.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <div class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
+                <div>
+                    <h3 class="text-sm font-bold tracking-wide text-white uppercase font-mono border-b border-slate-800 pb-2 mb-4">
+                        <i class="fa-solid fa-sliders text-cyan-400 mr-1.5"></i> 1. Optimizer Sandbox Controller
+                    </h3>
+                    <p class="text-xs text-slate-400 leading-relaxed mb-6">
+                        Click the manual iteration button below to run the parameter update loop. Observe how AdamW builds dynamic running tracking history vectors to stabilize optimization steps.
+                    </p>
+
+                    <div class="space-y-4">
+                        <div class="flex gap-2">
+                            <button onclick="stepAdamW()" class="flex-1 py-2.5 px-3 bg-purple-500 hover:bg-purple-600 text-slate-950 rounded-xl text-xs font-bold font-mono transition-all">
+                                <i class="fa-solid fa-play mr-1"></i> Compute AdamW Iteration Step
+                            </button>
+                            <button onclick="resetAdamW()" class="py-2 px-4 bg-slate-950 border border-slate-800 hover:bg-slate-800 rounded-xl text-xs font-bold font-mono transition-all">
+                                <i class="fa-solid fa-rotate-left"></i> Reset
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 mt-6 text-xs text-slate-400 space-y-1">
+                    <span class="text-white block uppercase font-mono tracking-wider font-semibold text-[10px] text-purple-400">⚡ Hyperparameter Constants Reference</span>
+                    <div class="grid grid-cols-2 gap-2 text-[11px] font-mono text-slate-500 mt-1">
+                        <span>Learning Rate ($\eta$): 0.15</span>
+                        <span>Weight Decay ($\lambda$): 0.01</span>
+                        <span>Beta 1 ($\beta_1$): 0.90</span>
+                        <span>Beta 2 ($\beta_2$): 0.95</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
+                            <h3 class="text-sm font-bold tracking-wide text-white uppercase font-mono">Calculations Matrix Console</h3>
+                        </div>
+                        <span id="step-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">Iteration: 0</span>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-4 mb-4 font-mono text-center">
+                        <div class="p-3 bg-slate-950 rounded-xl border border-slate-800">
+                            <span class="text-[9px] text-purple-400 block uppercase">1st Moment ($m_t$)</span>
+                            <span id="metric-m1" class="text-xs font-bold text-white">0.0000</span>
+                        </div>
+                        <div class="p-3 bg-slate-950 rounded-xl border border-slate-800">
+                            <span class="text-[9px] text-cyan-400 block uppercase">2nd Moment ($v_t$)</span>
+                            <span id="metric-m2" class="text-xs font-bold text-white">0.0000</span>
+                        </div>
+                        <div class="p-3 bg-slate-950 rounded-xl border border-slate-800">
+                            <span class="text-[9px] text-amber-400 block uppercase">Current Weight ($\theta_t$)</span>
+                            <span id="metric-weight" class="text-xs font-bold text-white">2.5000</span>
+                        </div>
+                    </div>
+
+                    <div id="narrative-box" class="text-xs text-slate-300 leading-relaxed mb-4">
+                        Click <b>Compute AdamW Iteration Step</b> to execute active vector calculations...
+                    </div>
+                </div>
+
+                <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                    <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                        <span><i class="fa-solid fa-square-root-variable text-purple-400 mr-1.5"></i> decoupled_adamw_update.tex</span>
+                        <span class="text-slate-500 uppercase font-bold text-[9px]">LaTeX Engine</span>
+                    </div>
+                    <div class="p-4 text-center bg-black min-h-[65px] flex items-center justify-center text-xs text-purple-300" id="latex-box">
+                        $$\theta_{t} = \theta_{t-1} - \eta \cdot \left( \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon} + \lambda \theta_{t-1} \right)$$
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-lg font-bold text-white mb-2 font-mono"><i class="fa-solid fa-clock text-cyan-400 mr-1"></i> Tracking the Core AdamW Update Sequence Loop</h2>
+            <p class="text-slate-400 text-xs leading-relaxed mb-4">
+                At each optimization checkpoint iteration step $t$, AdamW executes four math sequences across every single target tensor block:
+            </p>
+            <div class="p-4 bg-slate-950 rounded-xl border border-slate-800 font-mono text-xs text-slate-400 space-y-3">
+                <div class="flex items-start gap-2">
+                    <span class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-500 shrink-0">Step 1</span>
+                    <div>
+                        <strong class="text-white block">Calculate Moments Moving Averages:</strong>
+                        The algorithm updates the exponential moving averages using historical decay constants $\beta_1$ and $\beta_2$:<br>
+                        $m_t = \beta_1 m_{t-1} + (1 - \beta_1) g_t \quad \text{and} \quad v_t = \beta_2 v_{t-1} + (1 - \beta_2) g_t^2$
+                    </div>
+                </div>
+                <div class="flex items-start gap-2">
+                    <span class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-500 shrink-0">Step 2</span>
+                    <div>
+                        <strong class="text-white block">Apply Initialization Bias Correction:</strong>
+                        Because moments are initialized at absolute zero, they are biased toward zero at early steps. AdamW dynamically counters this scaling drop during early iterations:<br>
+                        $\hat{m}_t = \frac{m_t}{1 - \beta_1^t} \quad \text{and} \quad \hat{v}_t = \frac{v_t}{1 - \beta_2^t}$
+                    </div>
+                </div>
+                <div class="flex items-start gap-2 text-purple-400 bg-purple-950/20 border border-purple-900/30 p-2 rounded">
+                    <span class="px-1.5 py-0.5 bg-purple-500 border border-purple-700 rounded text-slate-950 font-bold shrink-0">Step 3</span>
+                    <div>
+                        <strong class="text-white block">Decouple and Subtract Independent Weight Decay:</strong>
+                        The decay step handles regularization cleanly outside the historical channels, keeping parameter footprints safely constrained without polluting adaptive variances arrays:<br>
+                        $\theta_t \leftarrow \theta_{t-1} - \eta \lambda \theta_{t-1}$
+                    </div>
+                </div>
+                <div class="flex items-start gap-2">
+                    <span class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-500 shrink-0">Step 4</span>
+                    <div>
+                        <strong class="text-white block">Execute Final Composite Update Pass:</strong>
+                        The final step applies the dynamically balanced ratio directly to the active parameters matrix:<br>
+                        $\theta_t \leftarrow \theta_t - \eta \cdot \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon}$
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        AdamW Structural Optimization Sandbox Engine Layers Map
+    </footer>
+
+    <script>
+        let stepCount = 0;
+        let currentWeight = 2.5;
+        let m1_momentum = 0.0;
+        let m2_variance = 0.0;
+
+        // Optimizer Hyperparameters Configuration Constants
+        const lr = 0.15;
+        const lambda_decay = 0.01;
+        const b1 = 0.90;
+        const b2 = 0.95;
+        const eps = 1e-8;
+
+        function stepAdamW() {
+            stepCount++;
+            
+            // Simulating an active gradient vector signal diminishing as parameters converge
+            const simulatedGradient = currentWeight * 0.75;
+
+            // 1. Calculate running moment tracking averages variables
+            m1_momentum = (b1 * m1_momentum) + ((1 - b1) * simulatedGradient);
+            m2_variance = (b2 * m2_variance) + ((1 - b2) * Math.pow(simulatedGradient, 2));
+
+            // 2. Perform initialization bias correction calculations passes
+            const m1_corrected = m1_momentum / (1 - Math.pow(b1, stepCount));
+            const p2_corrected = m2_variance / (1 - Math.pow(b2, stepCount));
+
+            // 3. Execute decoupled adaptive weight decay adjustment step
+            const decayFactor = lr * lambda_decay * currentWeight;
+
+            // 4. Update core parameters registers matrix array configurations
+            const adaptiveStep = lr * (m1_corrected / (Math.sqrt(p2_corrected) + eps));
+            currentWeight = currentWeight - decayFactor - adaptiveStep;
+
+            // Synchronize variable readout fields inside output viewports
+            document.getElementById('metric-m1').innerText = m1_momentum.toFixed(4);
+            document.getElementById('metric-m2').innerText = m2_variance.toFixed(4);
+            document.getElementById('metric-weight').innerText = currentWeight.toFixed(4);
+            document.getElementById('step-badge').innerText = `Iteration: ${stepCount}`;
+
+            const narrative = document.getElementById('narrative-box');
+            if (Math.abs(simulatedGradient) < 0.05) {
+                narrative.innerHTML = "🎉 <b>Optimization convergence achieved!</b> The parameters have successfully reached the local minimum. Gradients are flat, and AdamW is smoothly stabilizing parameter updates.";
+            } else {
+                narrative.innerHTML = `Iteration ${stepCount} complete. Notice how AdamW isolates weight regularization ($-\\eta \\lambda \\theta$) entirely from the 1st and 2nd moments, preventing variance distortion.`;
+            }
+
+            // Push fresh equation text down using double backslashes to avoid escaping bugs
+            document.getElementById('latex-box').innerText = 
+                `$$\\\\theta_{${stepCount}} = ${currentWeight.toFixed(3)} - ${lr.toFixed(2)} \\\\cdot \\\\left( \\\\frac{${m1_corrected.toFixed(3)}}{\\\\sqrt{${p2_corrected.toFixed(3)}} + \\\\epsilon} + (${lambda_decay} \\\\cdot ${currentWeight.toFixed(2)}) \\\\right)$$`;
+
+            // Prompt MathJax parser engine to typeset the raw text into native equations
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        function resetAdamW() {
+            stepCount = 0;
+            currentWeight = 2.5;
+            m1_momentum = 0.0;
+            m2_variance = 0.0;
+
+            document.getElementById('metric-m1').innerText = "0.0000";
+            document.getElementById('metric-m2').innerText = "0.0000";
+            document.getElementById('metric-weight').innerText = "2.5000";
+            document.getElementById('step-badge').innerText = "Iteration: 0";
+            document.getElementById('narrative-box').innerHTML = "Click <b>Compute AdamW Iteration Step</b> to execute active vector calculations...";
+            
+            document.getElementById('latex-box').innerText = `$$\\\\theta_{t} = \\\\theta_{t-1} - \\\\eta \\\\cdot \\\\left( \\\\frac{\\\\hat{m}_t}{\\\\sqrt{\\\\hat{v}_t} + \\\\epsilon} + \\\\lambda \\\\theta_{t-1} \\\\right)$$`;
+            
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        // Run default state setup initialization on document viewport load
+        window.onload = () => {
+            resetAdamW();
+        }
+    </script>
+</body>
+</html>

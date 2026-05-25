@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive LLM Self-Attention Matrix Flow Visualizer</title>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: #111827;
+            --border: #374151;
+            --text-main: #f9fafb;
+            --text-muted: #9ca3af;
+            
+            /* Component Matrix Colors */
+            --x-color: #a855f7;
+            --q-color: #3b82f6;
+            --k-color: #ec4899;
+            --value-color: #10b981;
+            --score-color: #eab308;
+            --output-color: #f97316;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1250px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            margin: 0 0 5px 0;
+            font-size: 2.4rem;
+            background: linear-gradient(to right, var(--q-color), var(--k-color), var(--value-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+        }
+
+        h2 {
+            margin-top: 0;
+            font-size: 1.25rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 8px;
+            margin-bottom: 15px;
+        }
+
+        /* Token interactive strip */
+        .token-strip {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .token-node {
+            background: #1f2937;
+            border: 1px solid var(--border);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .token-node:hover {
+            border-color: var(--q-color);
+        }
+
+        .token-node.active {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: var(--q-color);
+            color: #60a5fa;
+        }
+
+        /* Matrix Architecture Grid Layout */
+        .flow-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+
+        @media(min-width: 900px) {
+            .flow-grid {
+                grid-template-columns: 1.2fr 2fr;
+            }
+        }
+
+        /* Matrix box styling */
+        .matrix-box {
+            background: #020617;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 15px;
+        }
+
+        .matrix-title {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .matrix-grid {
+            display: grid;
+            font-family: 'Courier New', monospace;
+            gap: 4px;
+            text-align: center;
+        }
+
+        .matrix-cell {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.05);
+            padding: 6px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            transition: background 0.3s;
+        }
+
+        .highlight-row { background: rgba(59, 130, 246, 0.15) !important; border-color: var(--q-color); }
+        .highlight-col { background: rgba(236, 72, 153, 0.15) !important; border-color: var(--k-color); }
+        .highlight-val { background: rgba(16, 185, 129, 0.15) !important; border-color: var(--value-color); }
+        
+        .math-sign {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--text-muted);
+        }
+
+        /* Live formula string display */
+        .formula-bar {
+            background: #090d16;
+            border-left: 4px solid var(--score-color);
+            padding: 12px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.95rem;
+            margin-top: 15px;
+            line-height: 1.4;
+        }
+        
+    </style>
+     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>Interactive Attention Calculation Matrix Flow</h1>
+        <p>Trace how a sequence computes linear projections ($Q, K, V$) and multiplies matrices in real time.</p>
+    </header>
+
+    <!-- STEP 1: INPUT AND LINEAR PROJECTIONS -->
+    <div class="card">
+        <h2>Step 1: Focus Target Token & Generate Linear Vectors ($Q, K, V$)</h2>
+        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 15px;">
+            Click a token below to designate it as the current target <b>Query (Q)</b>. The calculator will immediately pull its linear embedding row values and evaluate them against all tokens' <b>Key (K)</b> and <b>Value (V)</b> metrics.
+        </p>
+        
+        <div class="token-strip" id="tokenStrip"></div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; margin-top: 20px;">
+            <!-- QUERY PROJECTION -->
+            <div class="matrix-box" style="border-top: 3px solid var(--q-color);">
+                <div class="matrix-title" style="color: var(--q-color);">Query Matrix (Q) <span style="font-size:0.75rem; color:var(--text-muted);">[Tokens × Dimensions]</span></div>
+                <div class="matrix-grid" id="queryMatrix" style="grid-template-columns: repeat(3, 1fr);"></div>
+            </div>
+            <!-- KEY PROJECTION -->
+            <div class="matrix-box" style="border-top: 3px solid var(--k-color);">
+                <div class="matrix-title" style="color: var(--k-color);">Key Matrix (K) <span style="font-size:0.75rem; color:var(--text-muted);">[Tokens × Dimensions]</span></div>
+                <div class="matrix-grid" id="keyMatrix" style="grid-template-columns: repeat(3, 1fr);"></div>
+            </div>
+            <!-- VALUE PROJECTION -->
+            <div class="matrix-box" style="border-top: 3px solid var(--value-color);">
+                <div class="matrix-title" style="color: var(--value-color);">Value Matrix (V) <span style="font-size:0.75rem; color:var(--text-muted);">[Tokens × Dimensions]</span></div>
+                <div class="matrix-grid" id="valueMatrix" style="grid-template-columns: repeat(3, 1fr);"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- STEP 2: CALCULATE MATRIX FLOW MAP -->
+    <div class="card">
+        <h2>Step 2: Dot Product Matrix Multiplication & Output Synthesis</h2>
+        <div class="flow-grid">
+            
+            <!-- ATTENTION MATMUL COMPOSITION -->
+            <div>
+                <div class="matrix-box" style="border-top: 3px solid var(--score-color);">
+                    <div class="matrix-title" style="color: var(--score-color);">Attention Scores ($Softmax(\frac{Q \cdot K^T}{\sqrt{d_k}})$)</div>
+                    <p style="font-size:0.8rem; color:var(--text-muted); margin: 0 0 10px 0;">Hover over any cell inside this score row matrix to view the precise linear dot-product vector tracking calculations.</p>
+                    <div class="matrix-grid" id="scoreMatrix" style="grid-template-columns: repeat(4, 1fr); font-weight: bold;"></div>
+                </div>
+
+                <div class="matrix-box" style="border-top: 3px solid var(--output-color);">
+                    <div class="matrix-title" style="color: var(--output-color);">Context Output Vector ($Score \cdot V$)</div>
+                    <div class="matrix-grid" id="outputMatrix" style="grid-template-columns: repeat(3, 1fr); font-weight: bold;"></div>
+                </div>
+            </div>
+
+            <!-- COMPUTATION ENGINE CONSOLE DIAGNOSTIC -->
+            <div style="display:flex; flex-direction:column; justify-content:space-between;">
+                <div class="matrix-box" style="height:100%; min-height: 200px;">
+                    <div class="matrix-title" style="color: #fff;">Interactive Execution Log Console</div>
+                    <div id="consoleTrace" style="font-family:monospace; font-size:0.9rem; line-height:1.6; color: var(--text-muted); padding-top: 10px;">
+                        Select or hover over an operation coordinate node above to render linear algebraic formula computations...
+                    </div>
+                    <div class="formula-bar" id="formulaDisplay">
+                        Select a token or node path execution module above to compute values live...
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    const tokens = ["AI", "models", "learn", "context"];
+    let activeIdx = 0;
+
+    // Simulated trained linear projection weights matrices parameters (3 Dimensions for clear layout UI mapping)
+    const Q_mat = [
+        [0.82, -0.11, 0.45],  // AI
+        [-0.23, 0.91, 0.12],  // models
+        [0.05, 0.31, 0.76],   // learn
+        [0.61, 0.14, -0.32]   // context
+    ];
+
+    const K_mat = [
+        [0.75, -0.05, 0.38],  // AI
+        [-0.15, 0.84, 0.22],  // models
+        [0.12, 0.40, 0.65],   // learn
+        [0.55, 0.20, -0.12]   // context
+    ];
+
+    const V_mat = [
+        [0.90, 0.10, 0.20],   // AI
+        [0.15, 0.95, 0.05],   // models
+        [0.30, 0.20, 0.85],   // learn
+        [0.70, 0.40, 0.10]   // context
+    ];
+
+    function init() {
+        renderStrip();
+        calculateAttentionFlow();
+    }
+
+    function renderStrip() {
+        const container = document.getElementById('tokenStrip');
+        container.innerHTML = '';
+        tokens.forEach((t, i) => {
+            const div = document.createElement('div');
+            div.className = `token-node ${i === activeIdx ? 'active' : ''}`;
+            div.innerText = `[${i}] ${t}`;
+            div.onclick = () => {
+                activeIdx = i;
+                renderStrip();
+                calculateAttentionFlow();
+            };
+            container.appendChild(div);
+        });
+    }
+
+    function calculateAttentionFlow() {
+        // Render raw Q, K, V matrices inside domestic structural layouts
+        renderMatrix('queryMatrix', Q_mat, activeIdx, 'row');
+        renderMatrix('keyMatrix', K_mat, null, null);
+        renderMatrix('valueMatrix', V_mat, null, null);
+
+        // Compute Attention Dot Products live for active index row block
+        let rawScores = [];
+        let scoreSum = 0;
+        const sqrt_dk = Math.sqrt(3); // Dimension structural count = 3
+
+        for (let j = 0; j < tokens.length; j++) {
+            let dotProduct = 0;
+            for (let d = 0; d < 3; d++) {
+                dotProduct += Q_mat[activeIdx][d] * K_mat[j][d];
+            }
+            let scaled = dotProduct / sqrt_dk;
+            let expVal = Math.exp(scaled); // Raw softmax logit numerator components mapping
+            rawScores.push(expVal);
+            scoreSum += expVal;
+        }
+
+        // Finalize softmax structural percentages probabilities
+        const finalWeights = rawScores.map(v => v / scoreSum);
+
+        // Render attention score matrix row values tracking
+        const scoreContainer = document.getElementById('scoreMatrix');
+        scoreContainer.innerHTML = '';
+        finalWeights.forEach((w, j) => {
+            const cell = document.createElement('div');
+            cell.className = 'matrix-cell';
+            cell.style.borderColor = 'var(--score-color)';
+            cell.innerText = w.toFixed(3);
+            cell.onmouseover = () => traceDotProduct(j, w, finalWeights);
+            scoreContainer.appendChild(cell);
+        });
+
+        // Compute contextual output vector synthesis matrix calculations ($Score \cdot V$)
+        let outputVector = [0, 0, 0];
+        for (let d = 0; d < 3; d++) {
+            for (let j = 0; j < tokens.length; j++) {
+                outputVector[d] += finalWeights[j] * V_mat[j][d];
+            }
+        }
+
+        const outputContainer = document.getElementById('outputMatrix');
+        outputContainer.innerHTML = '';
+        outputVector.forEach((v) => {
+            const cell = document.createElement('div');
+            cell.className = 'matrix-cell';
+            cell.style.backgroundColor = 'rgba(249, 115, 22, 0.1)';
+            cell.style.borderColor = 'var(--output-color)';
+            cell.innerText = v.toFixed(3);
+            outputContainer.appendChild(cell);
+        });
+
+        // Default programmatic tracking console dump message context initialization
+        traceDotProduct(0, finalWeights[0], finalWeights);
+    }
+
+    function renderMatrix(targetId, matrixData, highlightIdx, highlightType) {
+        const container = document.getElementById(targetId);
+        container.innerHTML = '';
+        matrixData.forEach((row, rIdx) => {
+            row.forEach((val, cIdx) => {
+                const cell = document.createElement('div');
+                cell.className = 'matrix-cell';
+                cell.innerText = val.toFixed(2);
+                
+                if (highlightType === 'row' && rIdx === highlightIdx) {
+                    cell.className += ' highlight-row';
+                }
+                container.appendChild(cell);
+            });
+        });
+    }
+
+    function traceDotProduct(keyIdx, finalWeight, allWeights) {
+        // Provide live line-by-line visual color tracking highlights configurations across DOM layout systems
+        const keyCells = document.getElementById('keyMatrix').children;
+        for(let i=0; i<keyCells.length; i++) {
+            let rowNum = Math.floor(i / 3);
+            keyCells[i].classList.toggle('highlight-col', rowNum === keyIdx);
+        }
+
+        const valCells = document.getElementById('valueMatrix').children;
+        for(let i=0; i<valCells.length; i++) {
+            let rowNum = Math.floor(i / 3);
+            valCells[i].classList.toggle('highlight-val', rowNum === keyIdx);
+        }
+
+        const qRow = Q_mat[activeIdx];
+        const kRow = K_mat[keyIdx];
+
+        document.getElementById('consoleTrace').innerHTML = `
+            <b style="color:var(--q-color);">Active Query [${tokens[activeIdx]}]:</b> [${qRow.map(v=>v.toFixed(2)).join(', ')}]
+            <br><b style="color:var(--k-color);">Target Key [${tokens[keyIdx]}]:</b> [${kRow.map(v=>v.toFixed(2)).join(', ')}]
+            <br><br>
+            <b>1. Compute Raw Dot Product:</b><br>
+            (${qRow[0].toFixed(2)} × ${kRow[0].toFixed(2)}) + (${qRow[1].toFixed(2)} × ${kRow[1].toFixed(2)}) + (${qRow[2].toFixed(2)} × ${kRow[2].toFixed(2)}) = <b>${(qRow[0]*kRow[0] + qRow[1]*kRow[1] + qRow[2]*kRow[2]).toFixed(3)}</b>
+            <br><br>
+            <b>2. Apply Softmax Weight Normalization across row items:</b><br>
+            Resulting localized probability impact distribution matrix: <b>${(finalWeight * 100).toFixed(1)}% Focus Weight</b>
+        `;
+
+        document.getElementById('formulaDisplay').innerHTML = `
+            AttentionScore("${tokens[activeIdx]}" → "${tokens[keyIdx]}") = ${(finalWeight).toFixed(3)}
+        `;
+    }
+
+    init();
+</script>
+
+</body>
+</html>

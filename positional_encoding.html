@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern LLM Positional Encoding Visualizer (RoPE)</title>
+     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: #161e2e;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --accent: #3b82f6;
+            --accent-glow: rgba(59, 130, 246, 0.5);
+            --border: #2d3748;
+            --vector-color: #10b981;
+            --rotated-vector-color: #f59e0b;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        header h1 {
+            margin: 0 0 10px 0;
+            font-size: 2.8rem;
+            background: linear-gradient(to right, #60a5fa, #c084fc, #fb923c);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+        }
+
+        header p {
+            color: var(--text-muted);
+            margin: 0;
+            font-size: 1.1rem;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+
+        @media (min-width: 1024px) {
+            .main-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        }
+
+        .card h2 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Input Controls */
+        textarea {
+            width: 100%;
+            height: 80px;
+            background-color: #0b0f19;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-main);
+            padding: 12px;
+            font-size: 1rem;
+            resize: none;
+            font-family: inherit;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+            align-items: center;
+            color: var(--text-muted);
+        }
+
+        input[type="range"] {
+            flex-grow: 1;
+            cursor: pointer;
+        }
+
+        /* 3D Visualization Area */
+        .viz-container {
+            width: 100%;
+            height: 350px;
+            background: #000;
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        canvas#ropeCanvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .viz-legend {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            pointer-events: none;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 3px;
+        }
+
+        .color-box { width: 12px; height: 12px; border-radius: 2px; }
+
+        /* Vector Visualization */
+        .vector-viz {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .vector-block {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .vector-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .vector-token {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: var(--accent);
+            margin-bottom: 10px;
+        }
+
+        .vector-values {
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            color: #10b981;
+            word-break: break-all;
+        }
+
+        /* Explanation Section */
+        .how-it-works {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+
+        @media (min-width: 768px) {
+            .how-it-works {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        .step {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .step-icon {
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            color: var(--accent);
+        }
+
+        .step h3 { margin: 0 0 10px 0; font-size: 1.2rem; color: #fff; }
+        .step p { margin: 0; font-size: 0.95rem; color: var(--text-muted); line-height: 1.6; }
+
+        .math-block {
+            background: #000;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            color: #f59e0b;
+            margin-top: 10px;
+            font-size: 0.8rem;
+            overflow-x: auto;
+        }
+        
+        .hl { color: var(--accent); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>LLM Positional Encoding Visualizer</h1>
+        <p>Interactive exploration of Rotary Positional Embedding (RoPE) used in Qwen & Gemma.</p>
+    </header>
+
+    <div class="main-grid">
+        <div class="card">
+            <h2>Step 1: The Input & Semantic Vector</h2>
+            <p style="color: var(--text-muted); margin-bottom: 20px;">LLMs represent words (tokens) as long vectors of numbers (embeddings). The animation below focuses on *one pair of dimensions* (X and Y) within that huge vector.</p>
+            <textarea id="inputText">The quick brown fox jumps</textarea>
+            
+            <div class="controls">
+                <label for="posSlider">Position (index <i>m</i>):</label>
+                <input type="range" id="posSlider" min="0" max="20" value="0">
+                <span id="posValue" style="font-weight: bold; color: var(--accent);">0</span>
+            </div>
+
+            <div class="vector-viz" id="vectorViz">
+                </div>
+        </div>
+
+        <div class="card">
+            <h2>Step 2: Apply Rotation (RoPE Core)</h2>
+            <div class="viz-container">
+                <canvas id="ropeCanvas"></canvas>
+                <div class="viz-legend">
+                    <div class="legend-item"><div class="color-box" style="background:var(--vector-color);"></div>Semantic Vector (No Position)</div>
+                    <div class="legend-item"><div class="color-box" style="background:var(--rotated-vector-color);"></div>Final Vector (Rotated by Position)</div>
+                </div>
+            </div>
+            <p style="color: var(--text-muted); margin-top: 15px; font-size: 0.9rem;">
+                As you move the position slider (Step 1), notice how the <span style="color:var(--rotated-vector-color);">Rotated Vector</span> turns. The distance from the center (magnitude) is identical, but the angle *is* the position information. Modern models like <span class="hl">Qwen 3.5</span> apply this math across all vector dimension pairs.
+            </p>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 40px;">
+        <h2 style="border-bottom: 1px solid var(--border); padding-bottom: 15px;">🧠 Why do Qwen and Gemma use RoPE?</h2>
+        <div class="how-it-works">
+            <div class="step">
+                <div class="step-icon">🏷️</div>
+                <h3>Vectors Don't Have Order</h3>
+                <p>When an LLM first converts the words <span class="hl">"fox"</span> and <span class="hl">"jumps"</span> into vectors, those vectors only represent *meaning*, not location. Without positional encoding, the model reads sentences as unordered bags of words.</p>
+            </div>
+            <div class="step">
+                <div class="step-icon">🔄</div>
+                <h3>The Rotary Fix (RoPE)</h3>
+                <p>Instead of *adding* numbers (older methods like Llama 1), <span class="hl">RoPE (Rotary Positional Embedding)</span> *multiplies* concept vectors by a rotation matrix. The angle of rotation is strictly tied to the token's index <span class="hl">m</span> in the sequence.</p>
+            </div>
+            <div class="step">
+                <div class="step-icon">📏</div>
+                <h3>Relative Distance</h3>
+                <p>Crucially, RoPE allows the model's Self-Attention mechanism to naturally determine the *distance* between any two tokens (e.g., <span class="hl">fox</span> at pos 3 and <span class="hl">jumps</span> at pos 4) simply by looking at the angle difference between their rotated vectors. This handles long-range context exceptionally well.</p>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // 1. Text processing logic (Simulation)
+    const simulatedEmbeddings = {
+        "The":   [0.1, 0.8],
+        "quick": [0.3, 0.6],
+        "brown": [0.6, 0.3],
+        "fox":   [0.8, 0.1],
+        "jumps": [0.7, -0.4],
+        "default": [0.5, 0.5]
+    };
+
+    let currentInput = "The quick brown fox jumps";
+    let currentPosition = 0;
+
+    // 2. 3D Canvas Visualization Logic (RoPE)
+    const canvas = document.getElementById('ropeCanvas');
+    const ctx = canvas.getContext('2d');
+    const posSlider = document.getElementById('posSlider');
+    const posValueDisplay = document.getElementById('posValue');
+    const vectorViz = document.getElementById('vectorViz');
+    const textArea = document.getElementById('inputText');
+
+    // Make canvas sharp on high DPI screens
+    function resizeCanvas() {
+        const displayWidth = canvas.clientWidth;
+        const displayHeight = canvas.clientHeight;
+        if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+            canvas.width = displayWidth;
+            canvas.height = displayHeight;
+        }
+    }
+
+    // Convert vector dimensions [x, y] to canvas coordinates
+    function vecToCanvas(vec, scale = 120) {
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        // Flip Y for standard Cartesian viz
+        return [centerX + vec[0] * scale, centerY - vec[1] * scale];
+    }
+
+    // The Mathematical Core: Applying Rotation (Simulated RoPE)
+    function applyRoPE(semanticVec, position) {
+        // Modern tokenizers typically rotate different dimension pairs at different speeds (theta).
+        // For simple visualization, we will use a consistent speed based on position.
+        const theta_base = 10000; // Found in Llama/Qwen config
+        const dim_pair_index = 0; // We are visualizing the first pair (0,1)
+        const dim = 2; // Total dimensions (just 2 for viz)
+
+        // Rotation angle formula
+        // angle = position * (1 / theta_base ^ (2*pair_index / total_dim))
+        // Simplified for our 2D visualization:
+        const angle = position * (1 / Math.pow(theta_base, 0)); 
+        
+        // Final Rotation Matrix math:
+        // [x'] = [cos(angle)  -sin(angle)] [x]
+        // [y'] = [sin(angle)   cos(angle)] [y]
+        const x = semanticVec[0];
+        const y = semanticVec[1];
+        
+        const cos_a = Math.cos(angle);
+        const sin_a = Math.sin(angle);
+        
+        const rotatedX = x * cos_a - y * sin_a;
+        const rotatedY = x * sin_a + y * cos_a;
+        
+        return [rotatedX, rotatedY];
+    }
+
+    function drawVector(ctx, start, end, color, thickness = 3) {
+        ctx.beginPath();
+        ctx.moveTo(start[0], start[1]);
+        ctx.lineTo(end[0], end[1]);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = thickness;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // Arrowhead
+        const angle = Math.atan2(end[1] - start[1], end[0] - start[0]);
+        const headLen = 10;
+        ctx.beginPath();
+        ctx.moveTo(end[0], end[1]);
+        ctx.lineTo(end[0] - headLen * Math.cos(angle - Math.PI / 6), end[1] - headLen * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(end[0] - headLen * Math.cos(angle + Math.PI / 6), end[1] - headLen * Math.sin(angle + Math.PI / 6));
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+    }
+
+    function drawVisualizer() {
+        resizeCanvas();
+        // Clear background
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        
+        // Draw Axes (X/Y dimension pairs)
+        ctx.beginPath();
+        ctx.moveTo(0, centerY); ctx.lineTo(canvas.width, centerY); // X axis
+        ctx.moveTo(centerX, 0); ctx.lineTo(centerX, canvas.height); // Y axis
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Get semantic embedding for current token/pos
+        const words = currentInput.split(' ').filter(w => w.length > 0);
+        const currentWord = words[currentPosition % words.length] || "fox";
+        const semanticVec = simulatedEmbeddings[currentWord] || simulatedEmbeddings["default"];
+        
+        // 1. Calculate and Draw Semantic Vector (Input concept)
+        const semanticEnd = vecToCanvas(semanticVec);
+        drawVector(ctx, [centerX, centerY], semanticEnd, 'rgba(16, 185, 129, 0.4)', 2); // Faded Semantic Vector
+
+        // 2. Calculate and Draw Rotated Vector (Final output with Position)
+        const rotatedVec = applyRoPE(semanticVec, currentPosition);
+        const rotatedEnd = vecToCanvas(rotatedVec);
+        drawVector(ctx, [centerX, centerY], rotatedEnd, '#f59e0b', 4); // Bright Rotated Vector
+
+        // Draw rotation arc
+        ctx.beginPath();
+        const startAngle = Math.atan2(-semanticVec[1], semanticVec[0]); // Canvas Y is inverted
+        const endAngle = Math.atan2(-rotatedVec[1], rotatedVec[0]);
+        const radius = semanticVec[0] * 120; // Match scale
+
+        // Simple arc animation logic
+        ctx.arc(centerX, centerY, 50, -startAngle, -endAngle, currentPosition < 0);
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    }
+
+    function updateTextVisualization() {
+        vectorViz.innerHTML = '';
+        const words = currentInput.split(' ').filter(w => w.length > 0);
+        if (words.length === 0) return;
+
+        // Display just the active word for clarity in the vector block
+        const targetWordIndex = currentPosition % words.length;
+        const currentWord = words[targetWordIndex];
+        const embedding = simulatedEmbeddings[currentWord] || simulatedEmbeddings["default"];
+
+        const block = document.createElement('div');
+        block.className = 'vector-block';
+        block.innerHTML = `
+            <div class="vector-label">Selected Token (Pos ${currentPosition})</div>
+            <div class="vector-token">"${currentWord}"</div>
+            <div class="vector-values">[${embedding[0].toFixed(2)}, ${embedding[1].toFixed(2)}]</div>
+        `;
+        vectorViz.appendChild(block);
+    }
+
+    function syncState() {
+        currentInput = textArea.value;
+        currentPosition = parseInt(posSlider.value);
+        posValueDisplay.innerText = currentPosition;
+        updateTextVisualization();
+        drawVisualizer();
+    }
+
+    // Event Listeners
+    posSlider.addEventListener('input', syncState);
+    textArea.addEventListener('input', syncState);
+    window.addEventListener('resize', drawVisualizer);
+
+    // Initial setup
+    syncState();
+</script>
+
+</body>
+</html>

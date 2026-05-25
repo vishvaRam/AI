@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoRound Sign-SGD Quantization Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        emerald: { 400: '#34d399', 500: '#10b981' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        .tensor-cell { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .cell-clamped { border-color: #fbbf24 !important; background: rgba(251, 191, 36, 0.15) !important; color: #fbbf24 !important; font-weight: bold; }
+        .cell-tuned { border-color: #34d399 !important; background: rgba(52, 211, 153, 0.15) !important; color: #34d399 !important; font-weight: bold; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-amber-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-amber-500 via-purple-500 to-cyan-500 rounded-lg">
+                    <i class="fa-solid fa-compress text-xl text-slate-950"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">Intel AutoRound Sign-SGD Optimization Engine</span>
+                    <span class="text-xs text-slate-400 block font-mono">Visualizing Block-Wise Reconstruction Loss, Continuous Rounding Adaptation, and Signed Gradients Updates</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-amber-400 font-bold">
+                Intel AutoRound INT4/INT2
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-2xl font-black text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-circle-nodes text-amber-400"></i> The Math Behind AutoRound Optimization
+            </h2>
+            <p class="text-slate-400 text-sm leading-relaxed mb-6">
+                Naive rounding to the nearest integer truncates delicate semantic states, introducing substantial quantization error at ultra-low widths (like INT4 boundaries). **AutoRound** treats quantization as an ongoing fine-tuning process. It groups layers into blocks and uses **Sign-SGD** to iteratively adjust rounding direction parameters, preserving the network's processing fidelity.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-amber-400 mb-1">Continuous Rounding ($V$)</h3>
+                    <p class="text-slate-400 leading-relaxed">AutoRound bypasses hard integer truncation by mapping rounding states to a continuous tracking variable ($V$). Passing $V$ through a rectified bending function scales values smoothly between integers, matching structural gradient flows.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-cyan-400 mb-1">Sign-SGD Optimization</h3>
+                    <p class="text-slate-400 leading-relaxed">Instead of scaling updates by raw, erratic gradient sizes, AutoRound uses **Sign-SGD**. It extracts only the directional *sign* ($\pm 1$) of the derivative, ensuring exceptionally smooth parameter adjustments across non-convex calibration spaces.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-emerald-400 mb-1">Block Reconstruction Loss</h3>
+                    <p class="text-slate-400 leading-relaxed">Optimization targets output discrepancy layers sequentially. Over a rapid 200-step phase, AutoRound forces the compressed weights matrix ($\hat{W}$) to mimic the native FP16 activation outputs ($Y = WX$), keeping loss near zero.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+            <div class="mb-4">
+                <span class="text-[10px] uppercase font-mono tracking-widest font-bold px-2 py-0.5 rounded border border-slate-700 text-slate-400 bg-slate-950">Calibration Terminal</span>
+                <h2 class="text-2xl font-black text-white mt-1">Learned Rounding Adaptive Simulation</h2>
+                <p class="text-slate-400 text-sm mt-0.5">Toggle between standard floor/ceil truncation and AutoRound optimization to see how Sign-SGD modifies the underlying tensor layout.</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                <div class="lg:col-span-5 bg-slate-950 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
+                    <div>
+                        <span class="text-[11px] font-mono text-slate-500 uppercase block mb-2">Select Optimization Pass</span>
+                        <div class="grid grid-cols-2 gap-2 bg-black p-1 rounded-xl border border-slate-900">
+                            <button onclick="setQuantMode('naive')" id="btn-mode-naive" class="py-2 px-3 text-xs font-bold rounded-lg transition-all duration-200 text-slate-400 hover:text-white">
+                                Nearest Integer
+                            </button>
+                            <button onclick="setQuantMode('autoround')" id="btn-mode-auto" class="py-2 px-3 text-xs font-bold rounded-lg transition-all duration-200 bg-amber-500 text-slate-950 shadow-md">
+                                AutoRound Loop
+                            </button>
+                        </div>
+
+                        <div class="mt-6">
+                            <span class="text-[10px] font-mono text-slate-500 uppercase block mb-2">Sample Block Weight Grid</span>
+                            <div class="grid grid-cols-3 gap-2 font-mono text-xs text-center" id="tensor-grid-container">
+                                </div>
+                        </div>
+                    </div>
+
+                    <div class="p-3 bg-slate-900/50 rounded-xl border border-slate-800 mt-6 text-xs text-slate-400 font-mono flex items-center justify-between">
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 bg-slate-800 border border-slate-700 rounded-sm"></span> Naive</span>
+                        <span id="legend-special" class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 bg-amber-500 rounded-sm"></span> Optimized</span>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                            <span class="text-xs font-bold tracking-wide text-white uppercase font-mono">Optimization Objective State</span>
+                            <span id="step-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800 font-bold">CALIBRATION RUNNING</span>
+                        </div>
+                        <div id="narrative-box" class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Selecting post-training calibration context variables arrays...
+                        </div>
+                    </div>
+
+                    <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                        <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                            <span><i class="fa-solid fa-square-root-variable text-amber-400 mr-1.5"></i> block_reconstruction_loss.tex</span>
+                            <span class="text-slate-500 uppercase font-bold text-[9px]">Sign-SGD Bounds</span>
+                        </div>
+                        <div class="p-4 text-center bg-black min-h-[65px] flex items-center justify-center text-xs text-amber-400" id="latex-box">
+                            $$\text{Mathematical Matrix Expressions}$$
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-lg font-bold text-white mb-2 font-mono"><i class="fa-solid fa-clock text-cyan-400 mr-1.5"></i> Execution Phase: Where does AutoRound fit?</h2>
+            <p class="text-slate-400 text-xs leading-relaxed mb-4">
+                AutoRound runs as an offline **Post-Training Quantization (PTQ)** optimization pass, executing directly after full precision model weights are compiled:
+            </p>
+            <div class="p-4 bg-slate-950 rounded-xl border border-slate-800 font-mono text-xs text-slate-400 space-y-2">
+                <div class="flex items-center gap-2"><span class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-500">Step 1</span> Load uncompressed base model parameters in full precision (FP16 or BF16) along with a clean validation calibration data batch.</div>
+                <div class="flex items-center gap-2 text-amber-400 bg-amber-950/20 border border-amber-900/30 p-2 rounded"><span class="px-1.5 py-0.5 bg-amber-900 border border-amber-700 rounded text-white font-bold">Step 2 (AutoRound)</span> The weights are split block-by-block. Sign-SGD jointly updates the continuous rounding parameter grid ($V$) over a fast 200-step optimization window.</div>
+                <div class="flex items-center gap-2"><span class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-500">Step 3</span> The tuned continuous coordinates drop into absolute quantized integers, yielding an optimized low-bit model ready for high-throughput vLLM serving.</div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        Intel AutoRound Optimization Framework System Map
+    </footer>
+
+    <script>
+        let currentMode = 'autoround';
+
+        const optimizationData = {
+            naive: {
+                badge: "Standard Round-to-Nearest Truncation",
+                narrative: "Standard quantization truncates decimal weights directly to the nearest integer grid coordinate ($\lfloor W \rceil$). This fast approach introduces **immense rounding errors and loss of information**, warping low-precision tensors (INT2/INT4) and degrading language reasoning and logic layers.",
+                latex: "\\hat{W} = \\text{clamp}\\left( \\lfloor \\frac{W}{\\alpha} \\rceil, \\beta_{\\text{min}}, \\beta_{\\text{max}} \\right)",
+                legendClass: "bg-slate-700",
+                legendLabel: "Nearest Integer Truncation",
+                cells: [
+                    { val: "3.00", style: "normal" }, { val: "-1.00", style: "normal" }, { val: "5.00", style: "normal" },
+                    { val: "-7.00", style: "normal" }, { val: "2.00", style: "normal" }, { val: "0.00", style: "normal" }
+                ]
+            },
+            autoround: {
+                badge: "Intel AutoRound Sign-SGD Parameter Optimization",
+                narrative: "<strong>AutoRound</strong> introduces a continuous optimization variable ($V$) mapped via a rectified bending function to establish flexible rounding decisions. Using **Sign-SGD** to adjust offsets based strictly on directional signs ($\pm 1$), AutoRound optimizes parameters block-by-block over a swift 200-step tuning phase. This keeps output reconstruction anomalies at zero.",
+                latex: "\\min_{V} \\| WX - \\hat{W}(V)X \\|^2_2 \\quad \\rightarrow \\quad V_{\\text{new}} = V_{\\text{old}} - \\eta \\cdot \\text{sign}(\\nabla \\mathcal{L})",
+                legendClass: "bg-amber-500",
+                legendLabel: "Sign-SGD Rounding Map",
+                cells: [
+                    { val: "3.42", style: "tuned" }, { val: "-1.12", style: "tuned" }, { val: "5.03", style: "tuned" },
+                    { val: "-6.88", style: "tuned" }, { val: "2.14", style: "tuned" }, { val: "0.05", style: "tuned" }
+                ]
+            }
+        };
+
+        function setQuantMode(modeKey) {
+            currentMode = modeKey;
+            const data = optimizationData[modeKey];
+
+            // Update mode toggle selection button styles
+            const btnNaive = document.getElementById('btn-mode-naive');
+            const btnAuto = document.getElementById('btn-mode-auto');
+            if (modeKey === 'naive') {
+                btnNaive.className = "py-2 px-3 text-xs font-bold rounded-lg transition-all duration-200 bg-slate-800 text-white border border-slate-700 shadow-md";
+                btnAuto.className = "py-2 px-3 text-xs font-bold rounded-lg transition-all duration-200 text-slate-500 hover:text-slate-300";
+            } else {
+                btnAuto.className = "py-2 px-3 text-xs font-bold rounded-lg transition-all duration-200 bg-slate-800 text-white border border-slate-700 shadow-md";
+                btnNaive.className = "py-2 px-3 text-xs font-bold rounded-lg transition-all duration-200 text-slate-500 hover:text-slate-300";
+            }
+
+            // Sync structural console report texts fields
+            document.getElementById('step-badge').innerText = data.badge;
+            document.getElementById('narrative-box').innerHTML = data.narrative;
+            
+            const legendLabel = document.getElementById('legend-special');
+            legendLabel.innerHTML = `<span class="w-2.5 h-2.5 rounded-sm ${data.legendClass}"></span> ${data.legendLabel}`;
+
+            // Build out tensor matrix grids elements fields dynamically
+            const container = document.getElementById('tensor-grid-container');
+            container.innerHTML = '';
+
+            data.cells.forEach(cell => {
+                const div = document.createElement('div');
+                div.className = "p-2 bg-slate-900 border border-slate-800 rounded text-slate-400 text-[11px] tensor-cell";
+                div.innerText = cell.val;
+
+                if (cell.style === 'tuned') {
+                    div.className += " cell-tuned";
+                } else if (cell.style === 'clamped') {
+                    div.className += " cell-clamped";
+                }
+                container.appendChild(div);
+            });
+
+            // Parse text equations blocks matrices frames safely using double backslashes
+            document.getElementById('latex-box').innerText = `$$${data.latex}$$`;
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        // Trigger startup default initializations paths on page rendering completions
+        window.onload = () => {
+            setQuantMode('autoround');
+        }
+    </script>
+</body>
+</html>

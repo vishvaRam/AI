@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DFlash Speculative Decoding Pipeline Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        .tile-node { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .tile-fused { border-color: #22d3ee !important; background: rgba(34, 211, 238, 0.15) !important; color: #22d3ee !important; font-weight: bold; box-shadow: 0 0 15px rgba(34, 211, 238, 0.3); }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-cyan-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-cyan-500 via-purple-500 to-emerald-500 rounded-lg">
+                    <i class="fa-solid fa-bolt text-xl text-slate-950"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">DFlash Speculative Optimization Pipeline</span>
+                    <span class="text-xs text-slate-400 block font-mono">Visualizing IO-Aware Block Tiling, Fused SRAM Verification, and Flash KV-Cache Scaling</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-cyan-400 font-bold">
+                IO-Bound Speculative Fusion
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-2xl font-black text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-server text-cyan-400"></i> The DFlash Paradigm: Eliminating Speculative Memory Bloat
+            </h2>
+            <p class="text-slate-400 text-sm leading-relaxed mb-6">
+                Standard speculative decoding reduces compute latency but drastically worsens **GPU Memory Bandwidth overhead**. Constantly writing and reading unverified speculative tokens across slow VRAM paths throttles throughput. **DFlash Attention Speculative Decoding** fixes this bottleneck by computing draft predictions and large-model verification inside **fused, IO-aware on-chip SRAM memory tiles**.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-cyan-400 mb-1">1. IO-Aware Block Tiling</h3>
+                    <p class="text-slate-400 leading-relaxed">Instead of processing full context strings, DFlash slices speculative sequences into fixed hardware-aligned tiles. It loads small blocks of Queries ($Q$), Keys ($K$), and Values ($V$) into fast SRAM registers to execute memory steps safely.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-purple-400 mb-1">2. Fused SRAM Verification</h3>
+                    <p class="text-slate-400 leading-relaxed">Rather than transferring speculative states back and forth to VRAM, target verification calculations happen **directly within the active SRAM tile**. The large model validates all candidate metrics in place before discarding unwanted traces.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-emerald-400 mb-1">3. Online Rescaling Gating</h3>
+                    <p class="text-slate-400 leading-relaxed">To sustain non-contiguous block verification passes without losing softmax precision, DFlash tracks and continuously scales local block statistics, preserving optimal convergence trends with near-zero latency overhead.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+            <div class="mb-4">
+                <span class="text-[10px] uppercase font-mono tracking-widest font-bold px-2 py-0.5 rounded border border-slate-700 text-slate-400 bg-slate-950">DFlash Hardware Tracking Workspace</span>
+                <h2 class="text-2xl font-black text-white mt-1">SRAM Speculative Tile Flow</h2>
+                <p class="text-slate-400 text-sm mt-0.5">Click the pipeline execution blocks below to trace how data streams move between high-latency VRAM and the fused on-chip SRAM cache.</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                <div class="lg:col-span-5 flex flex-col gap-3" id="dflash-stepper-container">
+                    </div>
+
+                <div class="lg:col-span-7 bg-slate-950 border border-slate-800 rounded-xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                            <span class="text-xs font-bold tracking-wide text-white uppercase font-mono">GPU Cache Register Topology</span>
+                            <span id="step-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">INIT</span>
+                        </div>
+
+                        <div class="space-y-4 mb-4 text-center font-mono text-xs">
+                            <div class="p-3 bg-slate-900/50 border border-slate-800 rounded-xl">
+                                <span class="text-[9px] text-slate-500 uppercase block mb-1">High Bandwidth Memory (HBM / VRAM)</span>
+                                <div class="flex justify-center gap-2 text-[10px]">
+                                    <div class="px-2 py-1 bg-black border border-slate-800 rounded text-slate-400">Draft $KV_i$</div>
+                                    <div class="px-2 py-1 bg-black border border-slate-800 rounded text-slate-400">Target $W_j$</div>
+                                </div>
+                            </div>
+
+                            <div class="text-slate-700 text-xs py-0.5 flex justify-center items-center gap-3">
+                                <i class="fa-solid fa-arrows-down-up-lock"></i>
+                                <span id="bus-traffic-txt" class="text-[9px] uppercase tracking-wider text-slate-500">Memory Bus Line Idle</span>
+                                <i class="fa-solid fa-arrows-down-up-lock"></i>
+                            </div>
+
+                            <div class="p-3 bg-slate-900/50 border border-slate-800 rounded-xl">
+                                <span class="text-[9px] text-slate-500 uppercase block mb-1.5">Fused On-Chip SRAM Matrix Block [IO-Optimized Cache Zone]</span>
+                                <div class="grid grid-cols-2 gap-2 max-w-sm mx-auto">
+                                    <div id="tile-node-draft" class="p-2 bg-slate-950 border border-slate-800 rounded text-slate-500 tile-node">Draft Speculation Block</div>
+                                    <div id="tile-node-target" class="p-2 bg-slate-950 border border-slate-800 rounded text-slate-500 tile-node">Target Verification Block</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="narrative-box" class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Select a DFlash optimization milestone track from the sideboard to execute calculations pass summaries...
+                        </div>
+                    </div>
+
+                    <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                        <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                            <span><i class="fa-solid fa-square-root-variable text-cyan-400 mr-1.5"></i> dflash_fused_attention.tex</span>
+                            <span class="text-slate-500 uppercase font-bold text-[9px]">SRAM Kernel Math</span>
+                        </div>
+                        <div class="p-4 text-center bg-black min-h-[60px] flex items-center justify-center text-xs text-cyan-400" id="latex-box">
+                            $$\text{Mathematical Matrix Map}$$
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        LLM DFlash Speculative Attention Integration Runtime Map Framework
+    </footer>
+
+    <script>
+        const dflashPipeline = [
+            {
+                title: "1. Hardware Tile Dimension Inception",
+                summary: "Determine static SRAM sub-block bounds based on sequence limits.",
+                narrative: "The execution engine queries active hardware parameters, computing ideal block sizes tailored to fit directly within on-chip **SRAM Cache Registers**. It formats sequence boundaries into manageable, fused evaluation tiles.",
+                latex: "B_{\\text{SRAM}} = \\lfloor \\frac{\\text{Available SRAM Cache}}{2 \\times (d_{\\text{draft}} + d_{\\text{target}})} \\rfloor",
+                badge: "HARDWARE-AWARE INTRA-OP KERNEL INIT",
+                highlightNodes: [],
+                bus: "Scanning Cache Limits & Allocation Bounds"
+            },
+            {
+                title: "2. In-Place Stream Speculation",
+                summary: "The small draft parameters load to output candidate steps on register.",
+                narrative: "The system streams draft sequence weights from VRAM into the active SRAM block. The miniature model generates candidate speculative tokens **directly inside the local SRAM tile footprint**, eliminating redundant memory bus write-backs.",
+                latex: "S_{\\text{draft}} = \\text{Softmax}\\left(\\frac{Q_{\\text{tile}} K_{\\text{draft}}^T}{\\sqrt{d}}\\right) V_{\\text{draft}} \\quad \\rightarrow \\quad \\text{Locked to SRAM}",
+                badge: "SRAM LOCALIZED DRAFT LOOKAHEAD COMPILATION",
+                highlightNodes: ["draft"],
+                bus: "READ BUS PASS: LOADING DRAFT SPECULATIVE VECTORS"
+            },
+            {
+                title: "3. Fused Parallel Verification Matrix",
+                summary: "The target model reads the exact same SRAM tile to validate paths.",
+                narrative: "Instead of copying candidate data blocks to separate memory locations, the large target model queries the **exact same SRAM tile**. It computes target logit parameters concurrently to evaluate the validity of the speculative choices in a single step.",
+                latex: "A_{ij} = \\text{Verify}\\left( S_{\\text{draft}} \\parallel Q_{\\text{target}} W_{\\text{verify}} \\right) \\in \\text{SRAM Register}",
+                badge: "CONCURRENT IN-PLACE TARGET VALIDATION",
+                highlightNodes: ["draft", "target"],
+                bus: "COMPUTE PASS: LOCALIZED REGISTER VALIDATION PASS"
+            },
+            {
+                title: "4. Online Rescaling Write-Back Pass",
+                summary: "Approved context matrices scale dynamically and commit back to VRAM.",
+                narrative: "The verification gating runs its check. Approved paths merge into the final sequence tracking registry on the fly. Flash-style online scaling coefficients recalculate localized softmax metrics instantly, writing the correct output back to VRAM with **zero memory fragmentation**.",
+                latex: "O_{\\text{fused}} = e^{m_{\\text{prev}} - m_{\\text{updated}}} O_{\\text{prev}} + \\sum \\alpha_k Y_{\\text{verified}, k} \\quad \\rightarrow \\quad \\text{Commit to VRAM}",
+                badge: "ONLINE RESCALING CACHE SYNCHRONIZATION",
+                highlightNodes: [],
+                bus: "WRITE BUS PASS: COMMIT ACCELERATED CONTEXT SCALARS"
+            }
+        ];
+
+        function buildDflashStepper() {
+            const container = document.getElementById('dflash-stepper-container');
+            container.innerHTML = '';
+
+            dflashPipeline.forEach((step, idx) => {
+                const btn = document.createElement('button');
+                btn.id = `dflash-step-btn-${idx}`;
+                btn.onclick = () => runDflashTrace(idx);
+                btn.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+                
+                btn.innerHTML = `
+                    <div class="flex items-center justify-between w-full">
+                        <span class="font-bold text-xs text-white tracking-wide uppercase font-mono">${step.title}</span>
+                        <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
+                    </div>
+                    <p class="text-xs leading-normal font-medium text-slate-400">${step.summary}</p>
+                `;
+                container.appendChild(btn);
+            });
+        }
+
+        function runDflashTrace(stepIdx) {
+            const data = dflashPipeline[stepIdx];
+
+            dflashPipeline.forEach((_, idx) => {
+                const buttonElement = document.getElementById(`dflash-step-btn-${idx}`);
+                if(buttonElement) buttonElement.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+            });
+
+            const activeBtn = document.getElementById(`dflash-step-btn-${stepIdx}`);
+            if(activeBtn) {
+                activeBtn.className = "w-full text-left p-4 rounded-xl bg-slate-800/80 border border-cyan-400 text-cyan-400 transition-all duration-200 flex flex-col gap-1";
+            }
+
+            document.getElementById('step-badge').innerText = data.badge;
+            document.getElementById('narrative-box').innerHTML = data.narrative;
+            document.getElementById('bus-traffic-txt').innerText = data.bus;
+
+            // Reset tile node highlights styles
+            const nodeKeys = ['draft', 'target'];
+            nodeKeys.forEach(k => {
+                const el = document.getElementById(`tile-node-${k}`);
+                el.className = "p-2 bg-slate-950 border border-slate-800 rounded text-slate-500 tile-node text-[11px]";
+            });
+
+            // Set active highlight overlays matching step metrics arrays pointers
+            data.highlightNodes.forEach(k => {
+                const el = document.getElementById(`tile-node-${k}`);
+                el.className = "p-2 border rounded tile-node tile-fused text-[11px] text-white";
+            });
+
+            // Trigger typesetting conversions across MathJax block handlers using double backslashes safely
+            document.getElementById('latex-box').innerText = `$$${data.latex}$$`;
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        window.onload = () => {
+            buildDflashStepper();
+            runDflashTrace(0);
+        }
+    </script>
+</body>
+</html>

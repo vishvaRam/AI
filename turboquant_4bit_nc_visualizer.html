@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vLLM TurboQuant 4-Bit Non-Contiguous Cache Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        emerald: { 400: '#34d399', 500: '#10b981' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        .bit-cell { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .cell-simd-active { border-color: #fbbf24 !important; background: rgba(251, 191, 36, 0.15) !important; color: #fbbf24 !important; font-weight: bold; box-shadow: 0 0 10px rgba(251, 191, 36, 0.2); }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-amber-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-amber-500 to-amber-600 rounded-lg text-slate-950">
+                    <i class="fa-solid fa-bolt-lightning text-xl"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">vLLM TurboQuant 4-Bit Acceleration Engine</span>
+                    <span class="text-xs text-slate-400 block font-mono">Visualizing Non-Contiguous Memory Packaging, SIMD Coalescing, and 4-Bit Bit-Packing Optimization</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-amber-400 font-bold">
+                --kv-cache-dtype turboquant_4bit_nc
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-2xl font-black text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-microchip text-amber-400"></i> Eliminating 4-Bit Strided Memory Overhead
+            </h2>
+            <p class="text-slate-400 text-sm leading-relaxed mb-6">
+                Standard 4-bit cache formats reduce memory footprint but degrade execution speeds because non-contiguous attention strides force separate GPU threads to pull data sequentially. **TurboQuant Non-Contiguous (`_nc`)** reorganizes the physical bits in memory to match the native warp lanes of the GPU. It groups scattered parameters into single, hardware-coalesced registers, optimizing throughput.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-amber-400 mb-1">1. 4-Bit Bit-Packing</h3>
+                    <p class="text-slate-400 leading-relaxed">Compresses the dynamic Key and Value parameters from full 16-bit precision down to signed 4-bit nibbles, unlocking a 4x reduction in cache memory consumption.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-cyan-400 mb-1">2. Non-Contiguous Coalescing</h3>
+                    <p class="text-slate-400 leading-relaxed">Instead of arranging data sequentially by token index, the layout interleaves bits directly to match the SIMD execution lanes of the GPU hardware, maximizing cache-line utilization.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-emerald-400 mb-1">3. SIMD Int4 Kernel Acceleration</h3>
+                    <p class="text-slate-400 leading-relaxed">The unified data format feeds directly into the GPU's low-bit arithmetic units. This allows a single instruction to execute attention scores across multiple tokens simultaneously in a single clock cycle.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+            <div class="mb-4">
+                <span class="text-[10px] uppercase font-mono tracking-widest font-bold px-2 py-0.5 rounded border border-slate-700 text-slate-400 bg-slate-950">Hardware Layout Terminal</span>
+                <h2 class="text-2xl font-black text-white mt-1">SIMD Cache Interleaving Simulator</h2>
+                <p class="text-slate-400 text-sm mt-0.5">Toggle between formats below to see how TurboQuant's non-contiguous layout coalesces scattered values into hardware-aligned registers.</p>
+            </div>
+
+            <div class="flex gap-2 mb-6">
+                <button onclick="switchTurboLayout('contiguous')" id="btn-layout-cont" class="px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all">
+                    ❌ Standard Contiguous (Uncoalesced Memory Jumps)
+                </button>
+                <button onclick="switchTurboLayout('turboquant_nc')" id="btn-layout-turbo" class="px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all">
+                    ✅ TurboQuant NC (Warp-Aligned Coalesced Read)
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                <div class="lg:col-span-5 bg-slate-950 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+                    <div>
+                        <span class="text-[9px] font-mono text-slate-500 uppercase block mb-3">GPU Physical 32-Bit Register Word Slices</span>
+                        <div class="grid grid-cols-4 gap-2 font-mono text-xs text-center bg-black p-4 rounded-xl border border-slate-900" id="bit-grid-container">
+                            </div>
+                    </div>
+                    <div class="mt-4 p-3 bg-slate-900/50 rounded-lg border border-slate-800 text-[10px] text-slate-400 font-mono flex items-center justify-between">
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 bg-slate-800 border border-slate-700 rounded-sm"></span> Idle Slice</span>
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 bg-amber-500/30 border border-amber-400 rounded-sm"></span> Coalesced Warp Read</span>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
+                            <h3 class="text-xs font-bold tracking-wide text-white uppercase font-mono">Kernel Diagnostic Log</h3>
+                            <span id="speed-badge" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-950 font-bold">HARDWARE SPEED</span>
+                        </div>
+                        <div id="narrative-box" class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Selecting microarchitecture cache layout configurations...
+                        </div>
+                    </div>
+
+                    <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                        <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                            <span><i class="fa-solid fa-square-root-variable text-amber-400 mr-1.5"></i> block_bit_packing.tex</span>
+                            <span class="text-slate-500 uppercase font-bold text-[9px]">Warp Coalescing Math</span>
+                        </div>
+                        <div class="p-4 text-center bg-black min-h-[65px] flex items-center justify-center text-xs text-amber-400" id="latex-box">
+                            $$\text{Loading math parameters}$$
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h3 class="text-sm font-bold text-white mb-3 font-mono"><i class="fa-solid fa-terminal text-amber-400 mr-1.5"></i> Launching TurboQuant NC inside vLLM</h3>
+            <p class="text-slate-400 text-xs leading-relaxed mb-3">
+                To launch a high-throughput vLLM engine instance with optimized 4-bit non-contiguous memory layouts enabled, supply the target cache parameter flag directly at service startup:
+            </p>
+            <div class="p-4 bg-slate-950 rounded-xl border border-slate-800 font-mono text-xs text-amber-400 overflow-x-auto">
+                vllm serve deepseek-ai/DeepSeek-V3 <span class="text-cyan-400">--kv-cache-dtype turboquant_4bit_nc</span> <span class="text-purple-400">--max-model-len 32768</span>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        vLLM TurboQuant Microarchitecture Core Acceleration Blueprint
+    </footer>
+
+    <script>
+        const layoutScenarios = {
+            contiguous: {
+                badge: "STANDARD STRIDED CONTIGUOUS ALLOCATION",
+                speedText: "IO-BOUND MEMORY STRIDE BOTTLENECK",
+                speedClass: "text-red-400 bg-red-950 border-red-900",
+                narrative: "Standard 4-bit layouts pack parameters sequentially by token index. However, when an execution thread queries non-contiguous attention heads, the GPU cannot fetch the data in a single parallel pass. Instead, it is forced to run multiple, high-latency memory jumps across rows, throttling performance and clogging the memory bus line.",
+                latex: "\\text{Stride Overhead} = \\sum_{h=1}^H \\text{Memory\_Fetch}(\\text{Token}_i, \\text{Head}_h) \\quad \\rightarrow \\quad \\text{Latency Blowout}",
+                activeCells: [0, 4, 8, 12],
+                cells: [
+                    { h: "H0", s: "simd-active" }, { h: "H1", s: "normal" }, { h: "H2", s: "normal" }, { h: "H3", s: "normal" },
+                    { h: "H0", s: "simd-active" }, { h: "H1", s: "normal" }, { h: "H2", s: "normal" }, { h: "H3", s: "normal" },
+                    { h: "H0", s: "simd-active" }, { h: "H1", s: "normal" }, { h: "H2", s: "normal" }, { h: "H3", s: "normal" },
+                    { h: "H0", s: "simd-active" }, { h: "H1", s: "normal" }, { h: "H2", s: "normal" }, { h: "H3", s: "normal" }
+                ]
+            },
+            turboquant_nc: {
+                badge: "TURBOQUANT NON-CONTIGUOUS PARALLEL FUSION",
+                speedText: "COALESCED SIMD LINEAR SPEED ACTIVE",
+                speedClass: "text-emerald-400 bg-emerald-950 border-emerald-900",
+                narrative: "The <strong>turboquant_4bit_nc</strong> format customizes the physical memory layout to perfectly match the GPU's warp structure. It packs non-contiguous head values into unified 32-bit register chunks. This allows the GPU to read scattered data pools in a single, parallel memory cycle, unlocking a **75% VRAM footprint reduction without causing data pipeline stalls**.",
+                latex: "\\hat{KV}_{\\text{packed}} = \\text{Pack4bit}\\left( X_{\\text{Head}_0}, X_{\\text{Head}_1}, X_{\\text{Head}_2}, X_{\\text{Head}_3} \\right) \\quad \\rightarrow \\quad \\text{1-Cycle Coalesced Read}",
+                activeCells: [0, 1, 2, 3],
+                cells: [
+                    { h: "H0", s: "simd-active" }, { h: "H1", s: "simd-active" }, { h: "H2", s: "simd-active" }, { h: "H3", s: "simd-active" },
+                    { h: "H0", s: "normal" }, { h: "H1", s: "normal" }, { h: "H2", s: "normal" }, { h: "H3", s: "normal" },
+                    { h: "H0", s: "normal" }, { h: "H1", s: "normal" }, { h: "H2", s: "normal" }, { h: "H3", s: "normal" },
+                    { h: "H0", s: "normal" }, { h: "H1", s: "normal" }, { h: "H2", s: "normal" }, { h: "H3", s: "normal" }
+                ]
+            }
+        };
+
+        function switchTurboLayout(modeKey) {
+            const data = layoutScenarios[modeKey];
+
+            // Adjust navigation control switches active status styling
+            const btnCont = document.getElementById('btn-layout-cont');
+            const btnTurbo = document.getElementById('btn-layout-turbo');
+
+            if (modeKey === 'contiguous') {
+                btnCont.className = "px-4 py-2 bg-amber-500 border border-amber-400 text-slate-950 text-xs font-mono font-bold rounded-xl transition-all shadow-md";
+                btnTurbo.className = "px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all text-slate-400";
+            } else {
+                btnTurbo.className = "px-4 py-2 bg-amber-500 border border-amber-400 text-slate-950 text-xs font-mono font-bold rounded-xl transition-all shadow-md";
+                btnCont.className = "px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all text-slate-400";
+            }
+
+            // Sync visual data text descriptors logs elements
+            document.getElementById('step-badge').innerText = data.badge;
+            document.getElementById('narrative-box').innerHTML = data.narrative;
+
+            const speedBadge = document.getElementById('speed-badge');
+            speedBadge.innerText = data.speedText;
+            speedBadge.className = `text-[9px] font-mono px-1.5 py-0.5 rounded border font-bold ${data.speedClass}`;
+
+            // Build out memory bits layout grid blocks dynamically
+            const gridContainer = document.getElementById('bit-grid-container');
+            gridContainer.innerHTML = '';
+
+            data.cells.forEach(cell => {
+                const div = document.createElement('div');
+                div.className = "p-2 bg-slate-900 border border-slate-800 rounded text-slate-500 text-[10px] bit-cell";
+                div.innerText = cell.h;
+
+                if (cell.s === 'simd-active') {
+                    div.className += " cell-simd-active";
+                }
+                gridContainer.appendChild(div);
+            });
+
+            // Re-render LaTeX matrix equations string blocks using double backslashes to protect formulas strings
+            document.getElementById('latex-box').innerText = `$$${data.latex}$$`;
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        // Trigger startup app config setup on window ready
+        window.onload = () => {
+            switchTurboLayout('turboquant_nc');
+        }
+    </script>
+</body>
+</html>

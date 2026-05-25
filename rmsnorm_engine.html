@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RMSNorm Mathematical Processing Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-cyan-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-cyan-500 to-purple-600 rounded-lg">
+                    <i class="fa-solid fa-scale-balanced text-xl text-slate-950"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">RMSNorm Hardware Stabilization Engine</span>
+                    <span class="text-xs text-slate-400 block font-mono">Visualizing Root Mean Square Scaling, Mean-Free Truncation, and Variance Stabilization</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-cyan-400 font-bold">
+                In-Layer Normalization
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-2xl font-black text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-circle-nodes text-cyan-400"></i> Speeding up Normalization in Transformers
+            </h2>
+            <p class="text-slate-400 text-sm leading-relaxed mb-6">
+                Deep neural networks suffer from internal covariate shift, where scale variances across layers distort training paths. While classic **LayerNorm** calculates both mean and variance parameters, **RMSNorm** proves that calculating the mean offset is completely redundant. By scaling activation vectors strictly by their root mean square value, it achieves identical stabilization properties while optimizing hardware throughput loops.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-cyan-400 mb-1">1. Squared Mean Squashing</h3>
+                    <p class="text-slate-400 leading-relaxed">The algorithm processes an incoming channel vector ($x$), squares each individual feature activation element ($x_i^2$), and computes their average sum over the dimension length $n$. This measures the raw vector magnitude without calculating shift metrics.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-purple-400 mb-1">2. Root Square Division</h3>
+                    <p class="text-slate-400 leading-relaxed">The system takes the square root of that average and adds a microscopic protection scalar ($\epsilon$) to prevent zero-division errors. Dividing the original vector by this target root yields a standardized variance profile centered cleanly around unity boundaries.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-emerald-400 mb-1">3. Learnable Gain Scaling ($\gamma$)</h3>
+                    <p class="text-slate-400 leading-relaxed">To preserve the network's expressive capacity, the normalized vector undergoes element-wise scaling using a learnable parameter array ($\gamma$). This allows the model to dynamically scale variance bounds per layer during training passes.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <div class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
+                <div>
+                    <h3 class="text-sm font-bold tracking-wide text-white uppercase font-mono border-b border-slate-800 pb-2 mb-4">
+                        <i class="fa-solid fa-sliders text-cyan-400 mr-1.5"></i> 1. Live Activation Adjuster
+                    </h3>
+                    <p class="text-xs text-slate-400 leading-relaxed mb-6">
+                        Modify the raw hidden state features below. Watch how RMSNorm instantly rescales disproportionate magnitudes into balanced variance structures.
+                    </p>
+
+                    <div class="space-y-4 font-mono text-xs text-slate-400">
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <span>Feature Activation 1 ($x_1$)</span>
+                                <span id="lbl-x1" class="text-cyan-400 font-bold">1.20</span>
+                            </div>
+                            <input type="range" id="slider-x1" min="-4" max="4" step="0.1" value="1.2" class="w-full accent-cyan-500 cursor-pointer">
+                        </div>
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <span>Feature Activation 2 ($x_2$)</span>
+                                <span id="lbl-x2" class="text-cyan-400 font-bold">-2.80</span>
+                            </div>
+                            <input type="range" id="slider-x2" min="-4" max="4" step="0.1" value="-2.8" class="w-full accent-cyan-500 cursor-pointer">
+                        </div>
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <span>Feature Activation 3 ($x_3$)</span>
+                                <span id="lbl-x3" class="text-cyan-400 font-bold">0.50</span>
+                            </div>
+                            <input type="range" id="slider-x3" min="-4" max="4" step="0.1" value="0.5" class="w-full accent-cyan-500 cursor-pointer">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 mt-6 text-xs text-slate-400 space-y-1">
+                    <span class="text-white block uppercase font-mono tracking-wider font-semibold text-[10px] text-cyan-400">⚙️ Computational Overhead Saved</span>
+                    <p class="margin-0 leading-normal">
+                        By dropping mean tracking steps ($\mu = \frac{1}{n}\sum x_i$), RMSNorm avoids full-row reduction cycles on the GPU, enhancing memory bandwidth efficiency.
+                    </p>
+                </div>
+            </div>
+
+            <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                            <h3 class="text-sm font-bold tracking-wide text-white uppercase font-mono">Calculations Matrix Console</h3>
+                        </div>
+                        <span id="rms-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 text-cyan-400 border border-slate-800 font-bold">RMS: 0.0000</span>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-4 mb-4 font-mono text-center">
+                        <div class="p-3 bg-slate-950 rounded-xl border border-slate-800">
+                            <span class="text-[9px] text-slate-500 block uppercase">Normalized $\bar{x}_1$</span>
+                            <span id="out-norm-1" class="text-xs font-bold text-white">0.0000</span>
+                        </div>
+                        <div class="p-3 bg-slate-950 rounded-xl border border-slate-800">
+                            <span class="text-[9px] text-slate-500 block uppercase">Normalized $\bar{x}_2$</span>
+                            <span id="out-norm-2" class="text-xs font-bold text-white">0.0000</span>
+                        </div>
+                        <div class="p-3 bg-slate-950 rounded-xl border border-slate-800">
+                            <span class="text-[9px] text-slate-500 block uppercase">Normalized $\bar{x}_3$</span>
+                            <span id="out-norm-3" class="text-xs font-bold text-white">0.0000</span>
+                        </div>
+                    </div>
+
+                    <div id="narrative-box" class="text-xs text-slate-300 leading-relaxed mb-4">
+                        Adjust slider values to track activation scaling transformations live...
+                    </div>
+                </div>
+
+                <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                    <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                        <span><i class="fa-solid fa-square-root-variable text-cyan-400 mr-1.5"></i> rmsnorm_formula.tex</span>
+                        <span class="text-slate-500 uppercase font-bold text-[9px]">LaTeX Engine</span>
+                    </div>
+                    <div class="p-4 text-center bg-black min-h-[65px] flex items-center justify-center text-xs text-cyan-300" id="latex-box">
+                        $$\text{RMSNorm}(x) = \frac{x}{\sqrt{\frac{1}{n} \sum_{i=1}^n x_i^2 + \epsilon}} \odot \gamma$$
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-lg font-bold text-white mb-2 font-mono"><i class="fa-solid fa-clock text-purple-400 mr-1"></i> Pre-Layer Normalization in Modern Transformers</h2>
+            <p class="text-slate-400 text-xs leading-relaxed mb-4">
+                Older models like GPT-2 applied normalization *after* attention layers (Post-LN). Modern state-of-the-art architectures (Qwen, LLaMA, Gemma) utilize **Pre-Layer Normalization (Pre-LN)** with RMSNorm for superior stability:
+            </p>
+            <div class="p-4 bg-slate-950 rounded-xl border border-slate-800 font-mono text-xs text-slate-400 space-y-2">
+                <div class="flex items-center gap-2"><span class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-500">Step 1</span> The input hidden state vector arrives at the layer boundary.</div>
+                <div class="flex items-center gap-2 text-cyan-400 bg-cyan-950/20 border border-cyan-900/30 p-2 rounded"><span class="px-1.5 py-0.5 bg-cyan-900 border border-cyan-700 rounded text-white font-bold">Step 2 (Pre-LN)</span> **RMSNorm executes immediately** on the clean vector path, normalizing the activations before they pass into multi-head attention.</div>
+                <div class="flex items-center gap-2"><span class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-500">Step 3</span> Attention processes the standardized data, and the output adds back to the original vector via a residual shortcut connection.</div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        LLM RMSNorm Stabilization Sandbox Operational Interface Map
+    </footer>
+
+    <script>
+        // Mock static Learnable Gain scale parameter matching standard weights configuration profiles
+        const gamma = 1.0; 
+        const eps = 1e-8;
+
+        function computeRMSNorm() {
+            // Fetch inputs from layout element controllers
+            const x1 = parseFloat(document.getElementById('slider-x1').value);
+            const x2 = parseFloat(document.getElementById('slider-x2').value);
+            const x3 = parseFloat(document.getElementById('slider-x3').value);
+
+            // Sync controller text labels displays
+            document.getElementById('lbl-x1').innerText = x1.toFixed(2);
+            document.getElementById('lbl-x2').innerText = x2.toFixed(2);
+            document.getElementById('lbl-x3').innerText = x3.toFixed(2);
+
+            // Calculate Mean Squares value: Mean of squares along vector size (n=3)
+            const sumSquares = (x1*x1) + (x2*x2) + (x3*x3);
+            const meanSquares = sumSquares / 3;
+
+            // Compute Root Mean Square value
+            const rms = Math.sqrt(meanSquares + eps);
+            document.getElementById('rms-badge').innerText = `RMS: ${rms.toFixed(4)}`;
+
+            // Execute normalization division: scale = x / rms
+            const norm1 = (x1 / rms) * gamma;
+            const norm2 = (x2 / rms) * gamma;
+            const norm3 = (x3 / rms) * gamma;
+
+            // Sync visual console text readout indicators
+            document.getElementById('out-norm-1').innerText = norm1.toFixed(4);
+            document.getElementById('out-norm-2').innerText = norm2.toFixed(4);
+            document.getElementById('out-norm-3').innerText = norm3.toFixed(4);
+
+            const narrative = document.getElementById('narrative-box');
+            narrative.innerHTML = `RMSNorm squashes input feature magnitudes using their joint root mean square value (<b>RMS = ${rms.toFixed(3)}</b>). Regardless of how high individual signals spike, the resulting layer distribution yields an optimized variance.`;
+
+            // Format dynamic block equations using double backslashes to bypass escaping issues
+            document.getElementById('latex-box').innerText = 
+                `$$\\\\text{RMSNorm}(\\\\begin{bmatrix} ${x1.toFixed(1)} \\\\\\\\ ${x2.toFixed(1)} \\\\\\\\ ${x3.toFixed(1)} \\\\end{bmatrix}) = \\\\frac{1}{\\\\sqrt{${meanSquares.toFixed(3)} + \\\\epsilon}} \\\\cdot \\\\begin{bmatrix} ${x1.toFixed(1)} \\\\\\\\ ${x2.toFixed(1)} \\\\\\\\ ${x3.toFixed(1)} \\\\end{bmatrix} = \\\\begin{bmatrix} ${norm1.toFixed(2)} \\\\\\\\ ${norm2.toFixed(2)} \\\\\\\\ ${norm3.toFixed(2)} \\\\end{bmatrix}$$`;
+
+            // Prompt MathJax to execute rendering passes safely
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        // Attach listening event handles onto inputs element rails
+        document.getElementById('slider-x1').addEventListener('input', computeRMSNorm);
+        document.getElementById('slider-x2').addEventListener('input', computeRMSNorm);
+        document.getElementById('slider-x3').addEventListener('input', computeRMSNorm);
+
+        // Run application setup functions on layout completions
+        window.onload = () => {
+            computeRMSNorm();
+        }
+    </script>
+</body>
+</html>

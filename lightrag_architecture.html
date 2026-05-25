@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LightRAG Ingestion & Query Flow Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .flow-line { background: repeating-linear-gradient(90deg, #334155, #334155 4px, transparent 4px, transparent 8px); }
+        .flow-line-active { background: repeating-linear-gradient(90deg, #22d3ee, #22d3ee 4px, transparent 4px, transparent 8px); animation: flowMove 1s linear infinite; }
+        @keyframes flowMove { 0% { background-position: 0px; } 100% { background-position: 8px; } }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+    </style>
+     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-cyan-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-lg text-slate-950">
+                    <i class="fa-solid fa-arrows-split-up-and-left text-xl"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">LightRAG Architecture Flow Engine</span>
+                    <span class="text-xs text-slate-400 block font-mono">Tracing Document Insertion vs. User Prompt Query Pipelines</span>
+                </div>
+            </div>
+            
+            <div class="bg-slate-950 p-1 rounded-xl border border-slate-800 flex">
+                <button onclick="setPipelineMode('insert')" id="btn-mode-insert" class="px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 bg-cyan-500 text-slate-950 shadow-lg">
+                    <i class="fa-solid fa-file-import mr-1.5"></i> 1. Document Insertion Flow
+                </button>
+                <button onclick="setPipelineMode('query')" id="btn-mode-query" class="px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-circle-question mr-1.5"></i> 2. User Query Flow
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+            <div class="absolute top-0 right-0 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none"></div>
+            
+            <div class="mb-6">
+                <span class="text-[10px] uppercase font-mono tracking-widest font-bold px-2 py-0.5 rounded border border-slate-700 text-slate-400 bg-slate-950" id="flow-badge">Active Engine Loop</span>
+                <h2 class="text-2xl font-black text-white mt-2" id="flow-title">Document Insertion Execution Path</h2>
+                <p class="text-slate-400 text-sm mt-1" id="flow-desc">See how an raw document gets split, analyzed via LLM, and distributed down into the 4 sub-storage systems.</p>
+            </div>
+
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-6 overflow-x-auto custom-scrollbar">
+                <div class="min-w-[1000px] py-4 flex flex-col items-center">
+                    
+                    <div class="flex items-center justify-center gap-12 w-full mb-8">
+                        <div id="flow-input-box" class="px-6 py-4 bg-slate-900 border-2 border-cyan-500 rounded-xl shadow-xl flex items-center gap-3 transition-all duration-300">
+                            <i id="flow-input-icon" class="fa-solid fa-file-text text-xl text-cyan-400"></i>
+                            <div>
+                                <h4 class="font-bold text-white text-sm" id="flow-input-header">Input Document</h4>
+                                <span class="text-[10px] font-mono text-slate-400" id="flow-input-sub">"policy_doc.txt"</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between w-full max-w-4xl relative px-4 mb-12">
+                        <div class="absolute top-1/2 left-0 right-0 h-0.5 -translate-y-1/2 flow-line z-0" id="track-line-1"></div>
+
+                        <div id="proc-node-1" class="z-10 bg-slate-900 border border-slate-700 px-4 py-3 rounded-xl text-center w-52 shadow-lg transition-all duration-300">
+                            <div class="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-1.5 border border-slate-600 text-xs text-slate-300 font-mono" id="proc-num-1">1</div>
+                            <h5 class="text-xs font-bold text-white mb-0.5" id="proc-txt-1">MD5 Fingerprint Match</h5>
+                            <span class="text-[10px] text-slate-400 font-mono" id="proc-sub-1">Deduplication Check</span>
+                        </div>
+
+                        <div id="proc-node-2" class="z-10 bg-slate-900 border border-slate-700 px-4 py-3 rounded-xl text-center w-52 shadow-lg transition-all duration-300">
+                            <div class="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-1.5 border border-slate-600 text-xs text-slate-300 font-mono" id="proc-num-2">2</div>
+                            <h5 class="text-xs font-bold text-white mb-0.5" id="proc-txt-2">Text Token Chunking</h5>
+                            <span class="text-[10px] text-slate-400 font-mono" id="proc-sub-2">Splitting Into Chunks</span>
+                        </div>
+
+                        <div id="proc-node-3" class="z-10 bg-slate-900 border border-slate-700 px-4 py-3 rounded-xl text-center w-52 shadow-lg transition-all duration-300">
+                            <div class="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-1.5 border border-slate-600 text-xs text-slate-300 font-mono" id="proc-num-3">3</div>
+                            <h5 class="text-xs font-bold text-white mb-0.5" id="proc-txt-3">LLM Graph Mining</h5>
+                            <span class="text-[10px] text-slate-400 font-mono" id="proc-sub-3">Entity-Relation Extract</span>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-4 gap-4 w-full">
+                        
+                        <div id="target-cell-doc" class="p-4 bg-slate-900/40 border border-slate-800 rounded-xl transition-all duration-300 text-center">
+                            <div class="w-9 h-9 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center mx-auto mb-2 text-sm border border-amber-500/20" id="icon-cell-doc">
+                                <i class="fa-solid fa-clipboard-list"></i>
+                            </div>
+                            <h4 class="text-xs font-bold text-white font-mono mb-1">doc_status_storage</h4>
+                            <p class="text-[11px] text-slate-400 line-clamp-2">Registry state log matching deduplication hashes.</p>
+                        </div>
+
+                        <div id="target-cell-kv" class="p-4 bg-slate-900/40 border border-slate-800 rounded-xl transition-all duration-300 text-center">
+                            <div class="w-9 h-9 rounded-lg bg-cyan-500/10 text-cyan-400 flex items-center justify-center mx-auto mb-2 text-sm border border-cyan-500/20" id="icon-cell-kv">
+                                <i class="fa-solid fa-database"></i>
+                            </div>
+                            <h4 class="text-xs font-bold text-white font-mono mb-1">kv_storage</h4>
+                            <p class="text-[11px] text-slate-400 line-clamp-2">Holds string partitions mapping to semantic index keys.</p>
+                        </div>
+
+                        <div id="target-cell-graph" class="p-4 bg-slate-900/40 border border-slate-800 rounded-xl transition-all duration-300 text-center">
+                            <div class="w-9 h-9 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center mx-auto mb-2 text-sm border border-purple-500/20" id="icon-cell-graph">
+                                <i class="fa-solid fa-circle-nodes"></i>
+                            </div>
+                            <h4 class="text-xs font-bold text-white font-mono mb-1">graph_storage</h4>
+                            <p class="text-[11px] text-slate-400 line-clamp-2">Links multi-hop entities and global relation matrices.</p>
+                        </div>
+
+                        <div id="target-cell-vector" class="p-4 bg-slate-900/40 border border-slate-800 rounded-xl transition-all duration-300 text-center">
+                            <div class="w-9 h-9 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto mb-2 text-sm border border-emerald-500/20" id="icon-cell-vector">
+                                <i class="fa-solid fa-cubes"></i>
+                            </div>
+                            <h4 class="text-xs font-bold text-white font-mono mb-1">vector_storage</h4>
+                            <p class="text-[11px] text-slate-400 line-clamp-2">Tracks high-dimensional similarity arrays for embeddings.</p>
+                        </div>
+
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <div class="lg:col-span-5 flex flex-col gap-3" id="step-description-stack">
+                </div>
+
+            <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-cyan-500 animate-pulse" id="console-pulse"></span>
+                            <h3 class="text-sm font-bold tracking-wide text-white uppercase font-mono">Live Data Projection State</h3>
+                        </div>
+                        <span id="console-step-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">STEP 1</span>
+                    </div>
+
+                    <div id="step-narrative-text" class="text-sm text-slate-300 leading-relaxed mb-4">
+                        Select an action block step configuration from the side index array to run trace evaluations...
+                    </div>
+                </div>
+
+                <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                    <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[11px] text-slate-400 font-mono">
+                        <span><i class="fa-solid fa-code text-cyan-400 mr-1.5"></i> runtime_in_flight_payload.json</span>
+                        <span class="text-slate-500 uppercase">State Frame</span>
+                    </div>
+                    <pre class="p-4 text-xs font-mono text-cyan-300 overflow-x-auto h-48 custom-scrollbar bg-black" id="json-debugger-block"><code>// Data Frame Matrix</code></pre>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono mt-12">
+        LightRAG Ingestion and Query Interactive Pipeline Framework Matrix 
+    </footer>
+
+    <script>
+        const pipelines = {
+            insert: {
+                title: "Document Insertion Execution Path",
+                desc: "Follow the step-by-step pipeline when a raw document is added to the LightRAG engine.",
+                inputHeader: "Input Document Stream",
+                inputSub: "enterprise_policy.md",
+                inputIcon: "fa-file-text text-cyan-400",
+                inputBorderColor: "#22d3ee",
+                procNodes: [
+                    { txt: "MD5 Verification Match", sub: "Deduplication Check" },
+                    { txt: "Text Token Chunking", sub: "Splitting Into Chunks" },
+                    { txt: "LLM Knowledge Mining", sub: "Entity-Relation Extract" }
+                ],
+                steps: [
+                    {
+                        title: "1. Check Duplication Status",
+                        summary: "The document's text is hashed via MD5 to prevent re-indexing duplicates.",
+                        narrative: "Before executing heavy LLM parsing steps, LightRAG calculates a strict MD5 checksum string of the full text input. It references the <b>doc_status_storage</b> ledger. If found, processing stops instantly to save token overhead.",
+                        badge: "READ -> doc_status_storage",
+                        targets: ["doc"],
+                        json: {
+                            "action": "DEDUPLICATION_CHECK",
+                            "calculated_md5": "a8f3c71d9e2b4a55c68d22e03f914402",
+                            "registry_match_found": false,
+                            "current_worker_state": "INIT_INGEST"
+                        }
+                    },
+                    {
+                        title: "2. Lock Registry & Chunk Text",
+                        summary: "The storage ledger switches status to PROCESSING, and text is chunked.",
+                        narrative: "Once unique status is verified, the entry transitions to <span class='text-amber-400 font-bold'>PROCESSING</span> within <b>doc_status_storage</b>. Simultaneously, the document is sliced into distinct 400-token chunks and written straight into the <b>kv_storage</b> container.",
+                        badge: "WRITE -> doc_status & kv_storage",
+                        targets: ["doc", "kv"],
+                        json: {
+                            "doc_status_storage": {
+                                "document_id": "doc_enterprise_policy",
+                                "status": "PROCESSING",
+                                "timestamp": "2026-05-25T18:22:00Z"
+                            },
+                            "kv_storage_write": {
+                                "key": "chunks::doc_ent_policy::chunk_0",
+                                "tokens": 385,
+                                "content": "Security access protocols require continuous verification matrices across endpoints..."
+                            }
+                        }
+                    },
+                    {
+                        title: "3. Mine Entities and Relations",
+                        summary: "An LLM extracts specific entity networks and directional links.",
+                        narrative: "Each segment from the key-value store runs through an asymmetric LLM information mining pass. The model identifies structural concepts (Entities) and charts how they link together (Relationships), routing them directly to the <b>graph_storage</b> engine.",
+                        badge: "WRITE -> graph_storage",
+                        targets: ["graph"],
+                        json: {
+                            "graph_storage_insert": {
+                                "entity_node": {
+                                    "id": "node_endpoint_verification",
+                                    "type": "PROTOCOL",
+                                    "description": "Continuous tracking matrices deployed on endpoint vectors."
+                                },
+                                "relationship_edge": {
+                                    "source": "node_endpoint_verification",
+                                    "target": "node_security_access",
+                                    "weight": 8.5,
+                                    "source_chunk_ref": "chunks::doc_ent_policy::chunk_0"
+                                }
+                            }
+                        }
+                    },
+                    {
+                        title: "4. Index Embedding Dimensions",
+                        summary: "Text segments and extracted entity summaries are vectorized.",
+                        narrative: "To enable semantic searches, both raw text segments and sub-graph description profiles are vectorized via an embedding layer. These high-dimensional vectors are appended into the <b>vector_storage</b> engine.",
+                        badge: "WRITE -> vector_storage",
+                        targets: ["vector"],
+                        json: {
+                            "vector_storage_index": {
+                                "index_dimension": 1536,
+                                "metric_type": "COSINE_SIMILARITY",
+                                "records": [
+                                    { "vector_id": "v_chunk_0", "embedding": [0.015, -0.042, 0.612, "...", 0.009] },
+                                    { "vector_id": "v_node_endpoint", "embedding": [0.089, 0.112, -0.054, "...", 0.312] }
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        title: "5. Mark Ingestion Completed",
+                        summary: "The system registry completes the lifecycle loop.",
+                        narrative: "Once the text, graph connections, and vectors are fully indexed across all three sub-storage layers, the coordinator updates the <b>doc_status_storage</b> ledger to <span class='text-emerald-400 font-bold'>COMPLETED</span>.",
+                        badge: "UPDATE -> doc_status_storage",
+                        targets: ["doc"],
+                        json: {
+                            "document_id": "doc_enterprise_policy",
+                            "status": "COMPLETED",
+                            "total_chunks_indexed": 1,
+                            "total_entities_extracted": 14,
+                            "pipeline_execution_time_seconds": 2.45
+                        }
+                    }
+                ]
+            },
+            query: {
+                title: "User Query Execution Path",
+                desc: "Follow the step-by-step pipeline when a user submits a query to the LightRAG model.",
+                inputHeader: "User Context Query Prompt",
+                inputSub: "What are security verify parameters?",
+                inputIcon: "fa-circle-question text-purple-400",
+                inputBorderColor: "#c084fc",
+                procNodes: [
+                    { txt: "Vector Space Match", sub: "Cosine Semantic Match" },
+                    { txt: "Sub-Graph Traversal", sub: "Multi-Hop Network Extract" },
+                    { txt: "Text Cache Retrieval", sub: "Prompt Synthesis Generation" }
+                ],
+                steps: [
+                    {
+                        title: "1. Vector Similarity Search",
+                        summary: "The prompt is vectorized to perform a semantic search.",
+                        narrative: "When a query arrives, LightRAG bypasses status checks and immediately converts the text into a vector embedding. It scans the <b>vector_storage</b> engine using cosine similarity to pull the top matching text segments and entity keys.",
+                        badge: "READ -> vector_storage",
+                        targets: ["vector"],
+                        json: {
+                            "incoming_query": "What are security verify parameters?",
+                            "vector_search_execution": {
+                                "metric": "COSINE",
+                                "returned_matches": [
+                                    { "vector_id": "v_node_endpoint", "score": 0.892 },
+                                    { "vector_id": "v_chunk_0", "score": 0.741 }
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        title: "2. Traverse the Knowledge Graph",
+                        summary: "Surfaced nodes are used to extract topological sub-graphs.",
+                        narrative: "Using the matched entity references (like <code class='text-purple-400 font-mono'>v_node_endpoint</code>), the system pulls adjacent relationship maps from <b>graph_storage</b>. This multi-hop path capture allows LightRAG to surface global, contextual insights that keyword matches miss.",
+                        badge: "READ -> graph_storage",
+                        targets: ["graph"],
+                        json: {
+                            "graph_subgraph_extraction": {
+                                "anchor_nodes": ["node_endpoint_verification"],
+                                "extracted_connections": [
+                                    {
+                                        "source": "node_endpoint_verification",
+                                        "target": "node_security_access",
+                                        "extracted_relationship_description": "Continuous tracking matrices deployed on endpoint vectors."
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        title: "3. Direct Text Reconstruction Lookup",
+                        summary: "The engine pulls matching original text chunks using their keys.",
+                        narrative: "Instead of running vector matches on everything, LightRAG targets the original text strings directly inside the <b>kv_storage</b> engine using the chunk hashes gathered from the graph and vector lookup steps.",
+                        badge: "READ -> kv_storage",
+                        targets: ["kv"],
+                        json: {
+                            "kv_cache_bulk_read": {
+                                "keys_submitted": ["chunks::doc_ent_policy::chunk_0"],
+                                "returned_payloads": [
+                                    { "key": "chunks::doc_ent_policy::chunk_0", "text": "Security access protocols require continuous verification matrices across endpoints..." }
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        title: "4. Synthesize the Grounded Prompt",
+                        summary: "Raw text and sub-graph data are packaged into a final prompt.",
+                        narrative: "The system merges the raw text strings from the key-value store with the structured relationship threads from the graph store, packaging them into a single context block. This grounded prompt is sent straight to the LLM for final generation.",
+                        badge: "SYNTHESIS -> Local LLM Target",
+                        targets: ["kv", "graph"],
+                        json: {
+                            "llm_prompt_composition": {
+                                "system_context_tokens": 820,
+                                "injected_graph_context": "Relationship: node_endpoint_verification -> node_security_access (Continuous tracking matrices deployed on endpoint vectors.)",
+                                "injected_text_chunks": ["Security access protocols require continuous verification matrices across endpoints..."],
+                                "final_generation_instruction": "Answer the user prompt accurately based ONLY on the validated context blocks provided above."
+                            }
+                        }
+                    }
+                ]
+            }
+        };
+
+        let activeMode = 'insert';
+
+        function setPipelineMode(modeKey) {
+            activeMode = modeKey;
+            
+            // Adjust header toggle buttons active layouts
+            const insBtn = document.getElementById('btn-mode-insert');
+            const qryBtn = document.getElementById('btn-mode-query');
+            
+            if (modeKey === 'insert') {
+                insBtn.className = "px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 bg-cyan-500 text-slate-950 shadow-lg";
+                qryBtn.className = "px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 text-slate-400 hover:text-white";
+                document.getElementById('console-pulse').className = "w-2.5 h-2.5 rounded-full bg-cyan-500 animate-pulse";
+                document.getElementById('console-step-badge').style.color = "var(--cyan-400)";
+            } else {
+                qryBtn.className = "px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 bg-purple-500 text-slate-950 shadow-lg";
+                insBtn.className = "px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 text-slate-400 hover:text-white";
+                document.getElementById('console-pulse').className = "w-2.5 h-2.5 rounded-full bg-purple-500 animate-pulse";
+                document.getElementById('console-step-badge').style.color = "var(--purple-400)";
+            }
+
+            // Sync static map texts and processing strip layouts descriptions
+            const currentConfig = pipelines[activeMode];
+            document.getElementById('flow-title').innerText = currentConfig.title;
+            document.getElementById('flow-desc').innerText = currentConfig.desc;
+            document.getElementById('flow-input-header').innerText = currentConfig.inputHeader;
+            document.getElementById('flow-input-sub').innerText = `"${currentConfig.sidebarText || currentConfig.inputSub}"`;
+            
+            // Swap icon markers dynamically
+            const inputIconNode = document.getElementById('flow-input-icon');
+            inputIconNode.className = `fa-solid ${currentConfig.inputIcon} text-xl`;
+            
+            const inputBox = document.getElementById('flow-input-box');
+            inputBox.style.borderColor = currentConfig.inputBorderColor;
+
+            // Re-render processing segment strip labels
+            currentConfig.procNodes.forEach((node, idx) => {
+                const stepIdx = idx + 1;
+                document.getElementById(`proc-txt-${stepIdx}`).innerText = node.txt;
+                document.getElementById(`proc-sub-${stepIdx}`).innerText = node.sub;
+            });
+
+            renderStepButtons();
+            executeStepTrace(0); // Load default pipeline step frame
+        }
+
+        function renderStepButtons() {
+            const container = document.getElementById('step-description-stack');
+            container.innerHTML = '';
+
+            const currentConfig = pipelines[activeMode];
+            currentConfig.steps.forEach((step, idx) => {
+                const btn = document.createElement('button');
+                btn.id = `step-action-node-${idx}`;
+                btn.onclick = () => executeStepTrace(idx);
+                btn.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+                
+                btn.innerHTML = `
+                    <div class="flex items-center justify-between w-full">
+                        <span class="font-bold text-xs text-white tracking-wide uppercase font-mono">${step.title}</span>
+                        <span class="text-[9px] font-mono tracking-wider font-semibold opacity-70 px-1.5 py-0.5 rounded bg-slate-950">${step.badge}</span>
+                    </div>
+                    <p class="text-xs leading-normal font-medium text-slate-400">${step.summary}</p>
+                `;
+                container.appendChild(btn);
+            });
+        }
+
+        function executeStepTrace(stepIdx) {
+            const currentConfig = pipelines[activeMode];
+            const activeStepData = currentConfig.steps[stepIdx];
+
+            // Toggle border line highlights on click triggers
+            currentConfig.steps.forEach((_, idx) => {
+                const node = document.getElementById(`step-action-node-${idx}`);
+                if(node) node.className = "w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 transition-all duration-200 hover:border-slate-700 flex flex-col gap-1 text-slate-300";
+            });
+
+            const targetBtn = document.getElementById(`step-action-node-${stepIdx}`);
+            if(targetBtn) {
+                targetBtn.className = `w-full text-left p-4 rounded-xl bg-slate-800/80 border ${activeMode === 'insert' ? 'border-cyan-400 text-cyan-400' : 'border-purple-400 text-purple-400'} transition-all duration-200 flex flex-col gap-1`;
+            }
+
+            // Sync structural trace fields text descriptors inside debug window panel
+            document.getElementById('console-step-badge').innerText = `TRACE FRAME STEP: ${stepIdx + 1} / ${currentConfig.steps.length}`;
+            document.getElementById('step-narrative-text').innerHTML = activeStepData.narrative;
+            document.getElementById('json-debugger-block').innerText = JSON.stringify(activeStepData.json, null, 2);
+
+            // Sync visual highlights with the storage layout boxes
+            const targetStorages = ['doc', 'kv', 'graph', 'vector'];
+            targetStorages.forEach(key => {
+                const cell = document.getElementById(`target-cell-${key}`);
+                const icon = document.getElementById(`icon-cell-${key}`);
+                cell.className = "p-4 bg-slate-900/40 border border-slate-800 rounded-xl transition-all duration-300 text-center";
+                icon.style.backgroundColor = "transparent";
+            });
+
+            // Activate glow markers on cells that correspond to the current step's read/write actions
+            activeStepData.targets.forEach(key => {
+                const cell = document.getElementById(`target-cell-${key}`);
+                const icon = document.getElementById(`icon-cell-${key}`);
+                
+                if (activeMode === 'insert') {
+                    cell.className = "p-4 bg-slate-900 border-2 border-cyan-400 rounded-xl transition-all duration-300 text-center shadow-[0_0_15px_rgba(34,211,238,0.2)]";
+                    icon.style.backgroundColor = "rgba(34, 211, 238, 0.15)";
+                } else {
+                    cell.className = "p-4 bg-slate-900 border-2 border-purple-400 rounded-xl transition-all duration-300 text-center shadow-[0_0_15px_rgba(168,85,247,0.2)]";
+                    icon.style.backgroundColor = "rgba(168, 85, 247, 0.15)";
+                }
+            });
+
+            // Toggle animating flow lines matching step positions
+            const lineTrack = document.getElementById('track-line-1');
+            if(stepIdx > 0 && stepIdx < 4) {
+                lineTrack.className = "absolute top-1/2 left-0 right-0 h-0.5 -translate-y-1/2 flow-line-active z-0";
+                if(activeMode === 'insert') {
+                    lineTrack.style.backgroundImage = "repeating-linear-gradient(90deg, #22d3ee, #22d3ee 4px, transparent 4px, transparent 8px)";
+                } else {
+                    lineTrack.style.backgroundImage = "repeating-linear-gradient(90deg, #c084fc, #c084fc 4px, transparent 4px, transparent 8px)";
+                }
+            } else {
+                lineTrack.className = "absolute top-1/2 left-0 right-0 h-0.5 -translate-y-1/2 flow-line z-0";
+                lineTrack.style.backgroundImage = "none";
+            }
+
+            // Toggle highlight treatments across central processing loop nodes
+            for (let i = 1; i <= 3; i++) {
+                const pNode = document.getElementById(`proc-node-${i}`);
+                const pNum = document.getElementById(`proc-num-${i}`);
+                pNode.className = "z-10 bg-slate-900 border border-slate-700 px-4 py-3 rounded-xl text-center w-52 shadow-lg transition-all duration-300";
+                pNum.style.backgroundColor = "transparent";
+                pNum.style.color = "var(--text-muted)";
+            }
+
+            if(stepIdx > 0 && stepIdx <= 3) {
+                const activeNode = document.getElementById(`proc-node-${stepIdx}`);
+                const activeNum = document.getElementById(`proc-num-${stepIdx}`);
+                if(activeNode) {
+                    activeNode.className = `z-10 bg-slate-900 border-2 ${activeMode === 'insert' ? 'border-cyan-400' : 'border-purple-400'} px-4 py-3 rounded-xl text-center w-52 shadow-xl transition-all duration-300`;
+                    activeNum.style.backgroundColor = activeMode === 'insert' ? 'var(--cyan-500)' : 'var(--purple-500)';
+                    activeNum.style.color = '#000';
+                }
+            }
+        }
+
+        // Initialize application loops on viewport compilation
+        window.onload = () => {
+            setPipelineMode('insert');
+        };
+    </script>
+</body>
+</html>

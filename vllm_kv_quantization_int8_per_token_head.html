@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vLLM Per-Token-Head KV-Cache Quantization Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        .quant-cell { transition: all 0.3s ease; }
+        .cell-outlier { background: rgba(251, 191, 36, 0.2) !important; border-color: #fbbf24 !important; color: #fbbf24 !important; font-weight: bold; }
+        .cell-quantized { background: rgba(34, 211, 238, 0.15) !important; border-color: #22d3ee !important; color: #22d3ee !important; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-cyan-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-lg">
+                    <i class="fa-solid fa-layer-group text-xl text-slate-950"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">vLLM KV-Cache Compression Engine</span>
+                    <span class="text-xs text-slate-400 block font-mono">Dynamic int8_per_token_head Precision Analysis</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-cyan-400 font-bold">
+                --kv-cache-dtype int8
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-2xl font-black text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-circle-nodes text-cyan-400"></i> Granular Cache Quantization Mechanics
+            </h2>
+            <p class="text-slate-400 text-sm leading-relaxed mb-6">
+                While standard tensor-wide quantization uses a single scaling factor across massive data matrices, vLLM's <code>int8_per_token_head</code> mode applies scale constraints directly at the individual **Token-Head intersection**. This protects accuracy from variance spikes caused by attention outliers, saving 50% VRAM with near-zero loss in language reasoning.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-cyan-400 mb-1">1. Per-Token-Head Isolation</h3>
+                    <p class="text-slate-400 leading-relaxed">Instead of letting an intense numerical value blowout ruin the precision of an entire layer, scaling bounds are restricted strictly to that specific token row and attention head column intersection block.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-purple-400 mb-1">2. Runtime Int8 Mapping</h3>
+                    <p class="text-slate-400 leading-relaxed">As new tokens generate, the engine scans the maximum absolute activation values within each head channel, dynamically deriving scaling factors ($\delta$) to squash FP16 values down to signed INT8 bits ($[-128, 127]$).</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-emerald-400 mb-1">3. Serving Throughput Boost</h3>
+                    <p class="text-slate-400 leading-relaxed">Slicing KV-Cache memory consumption in half relaxes the GPU's memory bandwidth limits. This allows your vLLM server to double max batch allocations and run higher concurrency loads smoothly.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+            <div class="mb-4">
+                <span class="text-[10px] uppercase font-mono tracking-widest font-bold px-2 py-0.5 rounded border border-slate-700 text-slate-400 bg-slate-950">Dynamic Cache Tensor Console</span>
+                <h2 class="text-2xl font-black text-white mt-1">Granular Scale Factor Mapping</h2>
+                <p class="text-slate-400 text-sm mt-0.5">Toggle between standard tensor-wide shortcuts and vLLM's per-token-head strategy to see how granular scale constraints isolate outlier spikes.</p>
+            </div>
+
+            <div class="flex gap-2 mb-6">
+                <button onclick="updateQuantizationMode('tensor_wide')" id="btn-mode-tensor" class="px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all">
+                    ❌ Tensor-Wide Scale (Outlier Blurs Grid)
+                </button>
+                <button onclick="updateQuantizationMode('per_token_head')" id="btn-mode-head" class="px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all">
+                    ✅ Per-Token-Head Scale (Isolated Accuracy)
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                <div class="lg:col-span-5 bg-slate-950 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center mb-3">
+                            <span class="text-[9px] font-mono text-slate-500 uppercase block">KV-Cache Head Slice Tensor Space</span>
+                            <span id="scale-factor-indicator" class="text-[10px] font-mono px-2 py-0.5 bg-slate-900 border rounded text-slate-400">Scale Updates On Click</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 font-mono text-xs text-center bg-black p-4 rounded-xl border border-slate-900" id="matrix-grid-container">
+                            </div>
+                    </div>
+                    <div class="mt-4 p-3 bg-slate-900/50 rounded-lg border border-slate-800 text-[10px] text-slate-400 font-mono flex items-center justify-between">
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 bg-cyan-500/30 border border-cyan-400 rounded-sm"></span> Quantized Int8</span>
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 bg-amber-500/30 border border-amber-400 rounded-sm"></span> Outlier Spike</span>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
+                            <h3 class="text-xs font-bold tracking-wide text-white uppercase font-mono">Quantization Pipeline Log Trace</h3>
+                            <span id="accuracy-badge" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-950 font-bold">ACCURACY INDEX</span>
+                        </div>
+                        <div id="narrative-box" class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Select a visualization strategy option from the control row above...
+                        </div>
+                    </div>
+
+                    <div class="bg-black rounded-xl border border-slate-800 overflow-hidden">
+                        <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                            <span><i class="fa-solid fa-square-root-variable text-cyan-400 mr-1.5"></i> per_token_head_scale.tex</span>
+                            <span class="text-slate-500 uppercase font-bold text-[9px]">vLLM Runtime Math</span>
+                        </div>
+                        <div class="p-4 text-center bg-black min-h-[65px] flex items-center justify-center text-xs text-cyan-400" id="latex-box">
+                            $$\text{Loading Cache Scaling Matrices parameters}$$
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h3 class="text-sm font-bold text-white mb-3 font-mono"><i class="fa-solid fa-terminal text-purple-400 mr-1.5"></i> Deploying Per-Token-Head Quantization in vLLM</h3>
+            <p class="text-slate-400 text-xs leading-relaxed mb-3">
+                To launch a vLLM server with granular 8-bit KV-Cache compression enabled, pass the target configuration flag directly at runtime initialization:
+            </p>
+            <div class="p-4 bg-slate-950 rounded-xl border border-slate-800 font-mono text-xs text-purple-400 overflow-x-auto">
+                vllm serve qwen/Qwen2.5-32B-Instruct <span class="text-cyan-400">--kv-cache-dtype int8</span> <span class="text-amber-400">--quantization-param-path per_token_head</span>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        vLLM KV-Cache Int8 Per-Token-Head Quantization Analytics Board
+    </footer>
+
+    <script>
+        const compressionScenarios = {
+            tensor_wide: {
+                badge: "COARSE TENSOR-WIDE SCALING",
+                accuracyText: "DEGRADED PRECISION CRITICAL LOSS",
+                accuracyClass: "text-red-400 bg-red-950 border-red-900",
+                scaleText: "Global Delta: 0.125 (Unified)",
+                narrative: "In <strong>Tensor-Wide Quantization</strong>, a single shared scaling factor is calculated for the entire cache matrix. When a sudden activation outlier spike appears (such as the value <code class='text-amber-400'>14.50</code>), it skews the global scaling factor out of proportion. As a result, the standard lower values surrounding it lose their granularity and blur together into zero matrices, degrading the model's text accuracy.",
+                latex: "\\delta_{\\text{global}} = \\frac{\\max(|X|)}{127} \\quad \\rightarrow \\quad \\hat{X}_{i,j} = \\text{round}\\left(\\frac{X_{i,j}}{\\delta_{\\text{global}}}\\right)",
+                cells: [
+                    { val: "0", style: "quantized" }, { val: "0", style: "quantized" }, { val: "1", style: "quantized" },
+                    { val: "127", style: "outlier" }, { val: "0", style: "quantized" }, { val: "-1", style: "quantized" }
+                ]
+            },
+            per_token_head: {
+                badge: "vLLM PER-TOKEN-HEAD ACCURATE SCALING",
+                accuracyText: "HIGH ACCURACY COMPRESSION ACTIVE",
+                accuracyClass: "text-emerald-400 bg-emerald-950 border-emerald-900",
+                scaleText: "Local Delta: Dynamic [i, j]",
+                narrative: "By enabling vLLM's <strong>int8_per_token_head</strong> architecture, scale factors are evaluated independently at each Token-Head junction ($[i, j]$). The activation outlier spike is safely isolated to its own channel with a custom scaling parameter, while surrounding text features retain their high-precision granularity. You save 50% VRAM with near-zero loss in reasoning capability.",
+                latex: "\\delta_{i,j} = \\frac{\\max(|X_{i,j}|)}{127} \\quad \\rightarrow \\quad \\hat{X}_{i,j,c} = \\text{round}\\left(\\frac{X_{i,j,c}}{\\delta_{i,j}}\\right)",
+                cells: [
+                    { val: "24", style: "quantized" }, { val: "-48", style: "quantized" }, { val: "112", style: "quantized" },
+                    { val: "127", style: "outlier" }, { val: "38", style: "quantized" }, { val: "-85", style: "quantized" }
+                ]
+            }
+        };
+
+        function updateQuantizationMode(modeKey) {
+            const data = compressionScenarios[modeKey];
+
+            // Adjust navigation selection button styles
+            const btnTensor = document.getElementById('btn-mode-tensor');
+            const btnHead = document.getElementById('btn-mode-head');
+            if (modeKey === 'tensor_wide') {
+                btnTensor.className = "px-4 py-2 bg-cyan-500 border border-cyan-400 text-slate-950 text-xs font-mono font-bold rounded-xl transition-all shadow-md";
+                btnHead.className = "px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all text-slate-400";
+            } else {
+                btnHead.className = "px-4 py-2 bg-cyan-500 border border-cyan-400 text-slate-950 text-xs font-mono font-bold rounded-xl transition-all shadow-md";
+                btnTensor.className = "px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all text-slate-400";
+            }
+
+            // Sync diagnostic readouts text metrics
+            document.getElementById('step-badge').innerText = data.badge;
+            document.getElementById('narrative-box').innerHTML = data.narrative;
+            document.getElementById('scale-factor-indicator').innerText = data.scaleText;
+
+            const accBadge = document.getElementById('accuracy-badge');
+            accBadge.innerText = data.accuracyText;
+            accBadge.className = `text-[9px] font-mono px-1.5 py-0.5 rounded border font-bold ${data.accuracyClass}`;
+
+            // Build out sub-matrix grid cells elements dynamically
+            const gridContainer = document.getElementById('matrix-grid-container');
+            gridContainer.innerHTML = '';
+
+            data.cells.forEach(cell => {
+                const div = document.createElement('div');
+                div.className = "p-3 bg-slate-900 border border-slate-800 rounded text-slate-400 text-[11px] quant-cell";
+                div.innerText = cell.val;
+
+                if (cell.style === 'outlier') {
+                    div.className += " cell-outlier";
+                } else if (cell.style === 'quantized') {
+                    div.className += " cell-quantized";
+                }
+                gridContainer.appendChild(div);
+            });
+
+            // Update LaTeX formula blocks using double backslashes to avoid string parsing bugs
+            document.getElementById('latex-box').innerText = `$$${data.latex}$$`;
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        // Initialize default application state configuration loop on viewport load
+        window.onload = () => {
+            updateQuantizationMode('per_token_head');
+        }
+    </script>
+</body>
+</html>

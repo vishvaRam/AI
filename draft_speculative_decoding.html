@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Draft-Based Speculative Decoding Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        red: { 400: '#f87171', 500: '#ef4444' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        /* Token Highlight Animations */
+        .tok-node { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .state-accepted { border-color: #10b981 !important; background: rgba(16, 185, 129, 0.15) !important; color: #34d399 !important; font-weight: bold; }
+        .state-rejected { border-color: #ef4444 !important; background: rgba(239, 68, 68, 0.15) !important; color: #f87171 !important; text-decoration: line-through; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-purple-500 selection:text-slate-950">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-gradient-to-r from-purple-500 to-cyan-500 rounded-lg">
+                    <i class="fa-solid fa-network-wired text-xl text-slate-950"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-lg text-white block">Draft model Speculative Decoding Pipeline</span>
+                    <span class="text-xs text-slate-400 block font-mono">Visualizing Lookahead Approximations, Parallel Target Validation, and Asymmetric Correction Gating</span>
+                </div>
+            </div>
+            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-purple-400 font-bold">
+                Asymmetric Generation
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-2xl font-black text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-microchip text-purple-400"></i> Speeding up Inference with Dual Models
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm mt-4">
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-purple-400 mb-1">1. Draft Loop Generation</h3>
+                    <p class="text-slate-400 leading-relaxed">The lightweight **Draft Model** (small parameter size) runs standard autoregressive lookahead loops. Because it features minimal layer dimensions, it generates a batch of $K$ prospective tokens with minimal memory-fetching lag.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-cyan-400 mb-1">2. Target Batch Evaluation</h3>
+                    <p class="text-slate-400 leading-relaxed">The massive **Target Model** (large parameter size) reads the draft's $K$ guesses all at once. It processes the full block in a single parallel step, evaluating token probability distributions simultaneously rather than waiting for sequential cycles.</p>
+                </div>
+                <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-emerald-400 mb-1">3. Rejection Gating & Correction</h3>
+                    <p class="text-slate-400 leading-relaxed">The system coordinates updates via a probability ratio check. If a guess fails the threshold, subsequent lookahead tokens are immediately discarded, and the target model provides a mathematically accurate correction on the spot.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+            <div class="mb-4">
+                <span class="text-[10px] uppercase font-mono tracking-widest font-bold px-2 py-0.5 rounded border border-slate-700 text-slate-400 bg-slate-950">Verification Matrix Terminal</span>
+                <h2 class="text-2xl font-black text-white mt-1">Draft Token Validation Monitor</h2>
+                <p class="text-slate-400 text-sm mt-0.5">Toggle between verification outcomes below to trace how the target model evaluates tokens and runs correction updates.</p>
+            </div>
+
+            <div class="flex gap-2 mb-6">
+                <button onclick="switchSpeculationMode('all_accepted')" id="btn-mode-all" class="px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all">
+                    ✅ Scenario: Full Lookahead Acceptance
+                </button>
+                <button onclick="switchSpeculationMode('partial_rejection')" id="btn-mode-partial" class="px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all">
+                    ⚠️ Scenario: Early Rejection & Target Reset
+                </button>
+            </div>
+
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-6 overflow-x-auto custom-scrollbar mb-6">
+                <div class="min-w-[950px] flex items-center justify-around font-mono text-xs py-4">
+                    
+                    <div class="p-3 bg-slate-900 border border-slate-800 rounded-xl text-center w-36">
+                        <span class="block text-slate-500 text-[10px] uppercase mb-1">Prefix Context</span>
+                        <div class="p-1.5 bg-black rounded border border-slate-900 text-[11px] text-slate-300">
+                            "Deep learning"
+                        </div>
+                    </div>
+
+                    <div class="text-slate-700 text-base"><i class="fa-solid fa-chevron-right"></i></div>
+
+                    <div class="p-4 bg-slate-900 border border-purple-500/20 rounded-xl text-center w-80">
+                        <span class="block text-purple-400 font-bold mb-2"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Draft Model Lookahead ($K=4$)</span>
+                        <div class="flex justify-center gap-1.5 text-[11px]">
+                            <div id="draft-tok-0" class="px-2 py-1 bg-black border border-slate-800 rounded text-slate-400 tok-node">models</div>
+                            <div id="draft-tok-1" class="px-2 py-1 bg-black border border-slate-800 rounded text-slate-400 tok-node">scale</div>
+                            <div id="draft-tok-2" class="px-2 py-1 bg-black border border-slate-800 rounded text-slate-400 tok-node">highly</div>
+                            <div id="draft-tok-3" class="px-2 py-1 bg-black border border-slate-800 rounded text-slate-400 tok-node">efficiently</div>
+                        </div>
+                    </div>
+
+                    <div class="text-slate-700 text-base"><i class="fa-solid fa-shuffle"></i></div>
+
+                    <div class="p-4 bg-slate-900 border border-cyan-500/20 rounded-xl text-center w-52">
+                        <span class="block text-cyan-400 font-bold mb-1"><i class="fa-solid fa-layer-group"></i> Target Verification</span>
+                        <div class="p-2 bg-black rounded border border-slate-800 text-[10px] text-slate-400">
+                            Single parallel verification forward pass
+                        </div>
+                    </div>
+
+                    <div class="text-slate-700 text-base"><i class="fa-solid fa-chevron-right"></i></div>
+
+                    <div class="p-4 bg-slate-900 border border-emerald-500/20 rounded-xl text-center w-44">
+                        <span class="block text-emerald-400 font-bold mb-1">Committed Tokens</span>
+                        <div class="p-2 bg-black rounded border border-slate-800 text-[11px] text-white font-bold" id="committed-text-view">
+                            +0 tokens
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                <div class="lg:col-span-5 bg-slate-950 border border-slate-800 p-5 rounded-xl flex flex-col justify-between">
+                    <div>
+                        <h4 class="text-xs font-bold font-mono text-slate-400 uppercase tracking-wider mb-2">In-Flight Trace Report</h4>
+                        <div id="narrative-box" class="text-xs text-slate-300 leading-relaxed">
+                            Select an interactive scenario above to run the pipeline simulation trace...
+                        </div>
+                    </div>
+                    <div class="mt-4 p-3 bg-slate-900/50 rounded-lg border border-slate-800 font-mono text-[10px] text-slate-500 leading-normal">
+                        By recycling discarded computing overhead dynamically, the target model injects its own high-precision replacement token whenever a draft guess is rejected, ensuring no forward pass is wasted.
+                    </div>
+                </div>
+
+                <div class="lg:col-span-7 bg-black rounded-xl border border-slate-800 overflow-hidden flex flex-col justify-between">
+                    <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                        <span><i class="fa-solid fa-square-root-variable text-purple-400 mr-1.5"></i> acceptance_sampling_distribution.tex</span>
+                        <span class="text-slate-500 uppercase font-bold text-[9px]">Gating Math</span>
+                    </div>
+                    <div class="p-4 text-center bg-black min-h-[70px] flex items-center justify-center text-xs text-purple-300" id="latex-box">
+                        $$\text{Awaiting Matrix Execution}$$
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/20 text-center py-6 text-xs text-slate-500 font-mono">
+        LLM Draft-Based Speculative Decoding Verification Pipeline Framework Map
+    </footer>
+
+    <script>
+        const scenarioDatabase = {
+            all_accepted: {
+                words: ["models", "scale", "highly", "efficiently"],
+                states: ["state-accepted", "state-accepted", "state-accepted", "state-accepted"],
+                narrative: "The small draft model quickly generates four tokens sequentially: <code class='text-purple-400 font-mono'>['models', 'scale', 'highly', 'efficiently']</code>. The large target model evaluates all four choices simultaneously in a single parallel pass. Every token satisfies the acceptance probability threshold, allowing the engine to **lock in +4 tokens at once**, speeding up generation by 400%.",
+                latex: "\\forall i \\in [1, K], \\quad P_{\\text{target}}(t_i) \\ge P_{\\text{draft}}(t_i) \\quad \\rightarrow \\quad \\text{All } K \\text{ tokens accepted.}",
+                outputMsg: "+4 Tokens Locked!"
+            },
+            partial_rejection: {
+                words: ["models", "scale", "dangerously", "dropped"],
+                states: ["state-accepted", "state-accepted", "state-rejected", "state-rejected"],
+                narrative: "The draft model predicts <code class='text-purple-400 font-mono'>['models', 'scale', 'dangerously', 'dropped']</code>. The large target model runs the check: it accepts the first two tokens, but catches a mismatch at index 3 (<span class='text-red-400 font-bold'>'dangerously'</span> vs target's prediction <span class='text-emerald-400 font-bold'>'highly'</span>). The remaining guesses are discarded. The target model outputs the correct word in the same cycle, yielding a net gain of **+3 tokens locked in**.",
+                latex: "r \\le \\frac{P_{\\text{target}}(t_3)}{P_{\\text{draft}}(t_3)} \\quad \\rightarrow \\quad \\text{Token 3 rejected. Sample correction } t'_3 \\sim \\max(0, P_{\\text{target}} - P_{\\text{draft}})",
+                outputMsg: "+3 Tokens Locked"
+            }
+        };
+
+        function switchSpeculationMode(modeKey) {
+            const data = scenarioDatabase[modeKey];
+
+            // Adjust navigation selection button styles
+            const btnAll = document.getElementById('btn-mode-all');
+            const btnPartial = document.getElementById('btn-mode-partial');
+
+            if (modeKey === 'all_accepted') {
+                btnAll.className = "px-4 py-2 bg-purple-500 border border-purple-400 text-slate-950 text-xs font-mono font-bold rounded-xl transition-all shadow-md";
+                btnPartial.className = "px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all text-slate-400";
+            } else {
+                btnPartial.className = "px-4 py-2 bg-purple-500 border border-purple-400 text-slate-950 text-xs font-mono font-bold rounded-xl transition-all shadow-md";
+                btnAll.className = "px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all text-slate-400";
+            }
+
+            // Sync visual tokens matrix elements text indicators and classes
+            data.words.forEach((w, idx) => {
+                const node = document.getElementById(`draft-tok-${idx}`);
+                node.innerText = w;
+                node.className = `px-2 py-1 border rounded text-xs font-mono tok-node ${data.states[idx]}`;
+            });
+
+            // Update documentation narrative text and outputs
+            document.getElementById('narrative-box').innerHTML = data.narrative;
+            document.getElementById('committed-text-view').innerText = data.outputMsg;
+
+            // Update MathJax equation blocks using double backslashes to avoid escaping bugs
+            document.getElementById('latex-box').innerText = `$$${data.latex}$$`;
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        // Initialize application setups loops on page compile
+        window.onload = () => {
+            switchSpeculationMode('all_accepted');
+        }
+    </script>
+</body>
+</html>
