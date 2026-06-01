@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vector DB Indexing Algorithms Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        /* Node & Graph Animations */
+        .vector-node { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .node-active { border-color: #22d3ee !important; background-color: rgba(34, 211, 238, 0.2) !important; color: white !important; box-shadow: 0 0 15px rgba(34, 211, 238, 0.4); }
+        .node-visited { border-color: #a855f7 !important; background-color: rgba(168, 85, 247, 0.1) !important; color: #c084fc !important; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-cyan-500 selection:text-slate-950 p-6">
+
+    <main class="max-w-7xl mx-auto space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="p-2 bg-gradient-to-r from-cyan-500 via-purple-500 to-emerald-500 rounded-lg text-slate-950">
+                    <i class="fa-solid fa-sitemap text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-black text-white">Vector DB Approximate Nearest Neighbor (ANN) Indexing</h1>
+                    <p class="text-xs text-slate-400 font-mono">Visualizing High-Dimensional Space Partitioning, Skip-List Graphs, and Product Quantization</p>
+                </div>
+            </div>
+            <p class="text-slate-400 text-sm leading-relaxed mt-4">
+                Linear brute-force search ($O(N)$) fails when scanning millions of high-dimensional document or image embeddings. Approximate Nearest Neighbor (ANN) indexing structures trade a minute fraction of recall accuracy for sub-millisecond search latencies. Toggle through the primary production indexing strategies below.
+            </p>
+        </section>
+
+        <section class="flex flex-wrap gap-2">
+            <button onclick="switchVectorIdxMode('ivf')" id="btn-idx-ivf" class="px-4 py-2 bg-slate-900 border border-slate-800 text-xs font-mono font-bold rounded-xl transition-all">
+                💎 Inverted File Index (IVF)
+            </button>
+            <button onclick="switchVectorIdxMode('hnsw')" id="btn-idx-hnsw" class="px-4 py-2 bg-slate-900 border border-slate-800 text-xs font-mono font-bold rounded-xl transition-all">
+                🕸️ Hierarchical Navigable Small World (HNSW)
+            </button>
+            <button onclick="switchVectorIdxMode('pq')" id="btn-idx-pq" class="px-4 py-2 bg-slate-900 border border-slate-800 text-xs font-mono font-bold rounded-xl transition-all">
+                📦 Product Quantization (PQ)
+            </button>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+            
+            <div class="lg:col-span-6 bg-slate-950 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between min-h-[380px]">
+                <div>
+                    <div class="flex justify-between items-center border-b border-slate-900 pb-3 mb-4">
+                        <span class="text-[10px] uppercase font-mono tracking-widest font-bold text-slate-500 block">Spatial Structural Layout Map</span>
+                        <span id="topology-layer-badge" class="text-[9px] font-mono px-2 py-0.5 bg-slate-900 border border-slate-800 text-cyan-400 font-bold rounded">GRID ACTIVE</span>
+                    </div>
+
+                    <div class="p-6 bg-slate-900/40 rounded-xl border border-slate-800 space-y-4 font-mono text-xs text-slate-400 relative overflow-hidden flex flex-col justify-center items-center min-h-[240px]" id="spatial-canvas-root">
+                        </div>
+                </div>
+
+                <div class="mt-4 p-3 bg-slate-900/50 rounded-xl border border-slate-800 text-[10px] text-slate-500 font-mono flex justify-between items-center">
+                    <span id="legend-item-left"><i class="fa-solid fa-circle text-cyan-500 mr-1"></i> Target Node</span>
+                    <span id="legend-item-right"><i class="fa-solid fa-circle text-purple-500 mr-1"></i> Checked Path</span>
+                </div>
+            </div>
+
+            <div class="lg:col-span-6 bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                        <h3 class="text-xs font-bold tracking-wide text-white uppercase font-mono" id="diagnostic-header-txt">Algorithmic Breakdown Log</h3>
+                        <span id="complexity-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 text-emerald-400 border border-emerald-900/40 font-bold">O(log N)</span>
+                    </div>
+                    <div id="narrative-box" class="text-xs text-slate-300 leading-relaxed mb-6">
+                        Select an indexing strategy module from the controller rail above to start data stream trace...
+                    </div>
+                </div>
+
+                <div class="bg-black rounded-xl border border-slate-800 overflow-hidden shrink-0">
+                    <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                        <span><i class="fa-solid fa-square-root-variable text-cyan-400 mr-1.5" id="math-brand-icon"></i> index_distance_optimization.tex</span>
+                        <span class="text-slate-500 uppercase font-bold text-[9px]">ANN Metric Space</span>
+                    </div>
+                    <div class="p-4 text-center bg-black min-h-[75px] flex items-center justify-center text-xs text-cyan-300" id="latex-box">
+                        $$\text{Awaiting Index Target Mode Execution}$$
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const indexingSuiteDatabase = {
+            ivf: {
+                buttonId: "btn-idx-ivf",
+                badge: "Voronoi Cells (K-Means Clustering Partition)",
+                header: "IVF: Inverted File Index Architecture",
+                complexity: "Search: O(C) vs O(N)",
+                complexityColor: "text-cyan-400 bg-cyan-950/40 border-cyan-900/50",
+                narrative: "<strong>Inverted File Index (IVF)</strong> uses <em>K-Means Clustering</em> to group high-dimensional embedding clouds into discrete spatial regions known as <strong>Voronoi Cells</strong>. Each cell has a centralized anchor point (Centroid). At query runtime, the database only calculates distances against vectors mapped inside the nearest centroids (controlled by the <code>nprobe</code> parameter), instantly bypassing 90% of the unrelated database fields.",
+                latex: "\\min_{c \\in C} \\| q - c \\|^2_2 \\quad \\rightarrow \\quad \\text{Restricts query scans to active Cell List } L_c",
+                leftLegend: "<i class='fa-solid fa-crosshairs text-cyan-400 mr-1'></i> Cell Centroid",
+                rightLegend: "<i class='fa-solid fa-border-all text-slate-600 mr-1'></i> Voronoi Boundaries",
+                canvasHtml: `
+                    <div class="w-full h-full grid grid-cols-2 gap-4 text-center p-2">
+                        <div class="p-3 border border-dashed border-slate-800 rounded-xl bg-slate-950/60 flex flex-col justify-between">
+                            <span class="text-[10px] text-slate-500 uppercase block mb-2">Voronoi Cell A</span>
+                            <div class="flex flex-wrap justify-center gap-1.5">
+                                <span class="px-2 py-1 bg-cyan-950 border border-cyan-400 text-cyan-400 text-[10px] font-bold rounded">Centroid A</span>
+                                <span class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 text-[9px] rounded">Vec_1</span>
+                                <span class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 text-[9px] rounded">Vec_2</span>
+                            </div>
+                            <span class="text-[9px] text-slate-600 mt-2 block font-sans">Query Hit Candidate Area</span>
+                        </div>
+                        <div class="p-3 border border-dashed border-slate-800 rounded-xl bg-slate-950/10 flex flex-col justify-between opacity-40">
+                            <span class="text-[10px] text-slate-500 uppercase block mb-2">Voronoi Cell B</span>
+                            <div class="flex flex-wrap justify-center gap-1.5">
+                                <span class="px-2 py-1 bg-slate-900 border border-slate-700 text-slate-500 text-[10px] rounded">Centroid B</span>
+                                <span class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 text-[9px] rounded">Vec_3</span>
+                                <span class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 text-[9px] rounded">Vec_4</span>
+                            </div>
+                            <span class="text-[9px] text-slate-600 mt-2 block font-sans">Bypassed safely (No Compute)</span>
+                        </div>
+                    </div>
+                `
+            },
+            hnsw: {
+                buttonId: "btn-idx-hnsw",
+                badge: "Multi-Layer Probabilistic Graph Skip-List",
+                header: "HNSW: Hierarchical Navigable Small World Graphs",
+                complexity: "Search: O(log N)",
+                complexityColor: "text-purple-400 bg-purple-950/40 border-purple-900/50",
+                narrative: "<strong>HNSW</strong> is the premium gold-standard for production vector recall. It structures vectors into a multi-layer graph reminiscent of a probabilistic skip-list. The <strong>Top Layers (Layer 1+)</strong> contain long-range connections for high-speed, coarse routing. The search enters at the top, skips across wide spaces, and drops down to the <strong>Bottom Layer (Layer 0)</strong>, which contains tightly linked short-range coordinates for fine-grained local neighborhood exploration.",
+                latex: "\\text{Pr}(\\text{Max Layer} = l) = \\lfloor -\\ln(\\text{uniform}_r) \\cdot m_L \\rfloor \\quad \\rightarrow \\quad \\text{Multi-tier Graph Skip Paths}",
+                leftLegend: "<i class='fa-solid fa-circle text-purple-400 mr-1'></i> Sparse Layer Entry",
+                rightLegend: "<i class='fa-solid fa-circle text-cyan-400 mr-1'></i> Dense Layer 0 Local Nodes",
+                canvasHtml: `
+                    <div class="w-full space-y-4 py-2">
+                        <div class="p-2 border border-purple-900/40 bg-purple-950/5 rounded-xl text-left">
+                            <span class="text-[9px] font-bold text-purple-400 block mb-1 uppercase tracking-wide">Layer 1 (Sparse Coarse Skipping Link)</span>
+                            <div class="flex items-center gap-6 justify-center">
+                                <div class="px-2 py-1 border border-purple-400 rounded bg-slate-950 font-bold text-[10px] text-white">Entry point [A]</div>
+                                <div class="text-purple-500 font-bold"><i class="fa-solid fa-arrow-right-long animate-pulse"></i></div>
+                                <div class="px-2 py-1 border border-slate-800 rounded bg-slate-950 text-[10px]">Macro Gateway [D]</div>
+                            </div>
+                        </div>
+                        <div class="p-2 border border-cyan-900/40 bg-cyan-950/5 rounded-xl text-left">
+                            <span class="text-[9px] font-bold text-cyan-400 block mb-1 uppercase tracking-wide">Layer 0 (Dense Vector Hub Neighborhood)</span>
+                            <div class="flex gap-2 justify-center text-[10px]">
+                                <div class="px-1.5 py-1 border border-purple-500 rounded text-purple-300">Node A</div>
+                                <div class="px-1.5 py-1 border border-cyan-400 rounded text-white font-bold">Nearest Vec B</div>
+                                <div class="px-1.5 py-1 border border-slate-800 rounded text-slate-500">Node C</div>
+                                <div class="px-1.5 py-1 border border-slate-800 rounded text-slate-500">Node D</div>
+                            </div>
+                        </div>
+                    </div>
+                `
+            },
+            pq: {
+                buttonId: "btn-idx-pq",
+                badge: "Lossy Sub-Vector Codebook Quantization",
+                header: "PQ: Product Quantization Compression Matrix",
+                complexity: "Memory: 16x to 32x Reduction",
+                complexityColor: "text-emerald-400 bg-emerald-950/40 border-emerald-900/50",
+                narrative: "<strong>Product Quantization (PQ)</strong> focuses on memory compression. Storing thousands of high-dimensional raw floats inside RAM is incredibly expensive. PQ splits a massive vector vector into smaller, low-dimensional sub-vectors (e.g., slicing a 1024-dim vector into eight 128-dim sub-vectors). Each segment quantizes against a learned codebook, replacing heavy floating-point blocks with **1-byte index coordinates**, slashing the RAM footprint by up to 95%.",
+                latex: "f: \\mathbb{R}^D \\rightarrow \\mathbb{R}^M \\quad \\text{where } M \\ll D \\quad \\rightarrow \\quad d(q, x) \\approx \\sum_{m=1}^M \\| q_m - q_{\\text{codebook}}(x_m) \\|^2_2",
+                leftLegend: "<i class='fa-solid fa-square text-emerald-400 mr-1'></i> Sub-Vector Block",
+                rightLegend: "<i class='fa-solid fa-hashtag text-cyan-400 mr-1'></i> Codebook Index Byte",
+                canvasHtml: `
+                    <div class="w-full space-y-3 font-mono text-xs">
+                        <div class="p-2 bg-slate-950 rounded border border-slate-800 text-center">
+                            <span class="text-[9px] text-slate-500 block uppercase mb-1">Native 1024-Dimension Float Vector (Heavy VRAM)</span>
+                            <div class="flex justify-center gap-1 text-[9px] opacity-70">
+                                <span class="px-1 bg-slate-900 border border-slate-800 text-slate-400">[0.142]</span>
+                                <span class="px-1 bg-slate-900 border border-slate-800 text-slate-400">[-0.992]</span>
+                                <span class="px-1 bg-slate-900 border border-slate-800 text-slate-400">[0.514]</span>
+                                <span class="px-1 bg-slate-900 border border-slate-800 text-slate-400">[...]</span>
+                            </div>
+                        </div>
+                        <div class="text-center text-emerald-400"><i class="fa-solid fa-down-long"></i> Product Quantization Loop</div>
+                        <div class="p-2 bg-slate-950 rounded border border-emerald-500/30 text-center max-w-xs mx-auto">
+                            <span class="text-[9px] text-emerald-400 block uppercase mb-1 font-bold">Quantized Codebook Coordinate (Compressed)</span>
+                            <div class="flex justify-center gap-2 text-[10px] font-bold text-white">
+                                <span class="px-2 py-0.5 bg-emerald-950 border border-emerald-500 rounded">Idx: #12</span>
+                                <span class="px-2 py-0.5 bg-emerald-950 border border-emerald-500 rounded">Idx: #204</span>
+                            </div>
+                        </div>
+                    </div>
+                `
+            }
+        };
+
+        function switchVectorIdxMode(modeKey) {
+            const data = indexingSuiteDatabase[modeKey];
+
+            // Update active state styling across selector buttons
+            ['ivf', 'hnsw', 'pq'].forEach(k => {
+                const btn = document.getElementById(indexingSuiteDatabase[k].buttonId);
+                if (k === modeKey) {
+                    btn.className = "px-4 py-2 bg-cyan-500 border border-cyan-400 text-slate-950 text-xs font-mono font-bold rounded-xl transition-all shadow-md";
+                } else {
+                    btn.className = "px-4 py-2 bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold rounded-xl transition-all text-slate-400";
+                }
+            });
+
+            // Sync visual text readout logs fields
+            document.getElementById('topology-layer-badge').innerText = data.badge;
+            document.getElementById('diagnostic-header-txt').innerText = data.header;
+            document.getElementById('narrative-box').innerHTML = data.narrative;
+
+            const compBadge = document.getElementById('complexity-badge');
+            compBadge.innerText = data.complexity;
+            compBadge.className = `text-[10px] font-mono px-2 py-0.5 rounded font-bold ${data.complexityColor}`;
+
+            document.getElementById('legend-item-left').innerHTML = data.leftLegend;
+            document.getElementById('legend-item-right').innerHTML = data.rightLegend;
+
+            // Swap visual spatial layout blueprint canvas content
+            document.getElementById('spatial-canvas-root').innerHTML = data.canvasHtml;
+
+            // Update LaTeX formula blocks tracking string matrix frames safely using double backslashes
+            document.getElementById('latex-box').innerText = `$$${data.latex}$$`;
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        // Initialize application setups loops on layout completion
+        window.onload = () => {
+            switchVectorIdxMode('hnsw'); // Default focus centered over HNSW graph structures
+        }
+    </script>
+</body>
+</html>

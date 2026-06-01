@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Generation Parameters Interactive Sandbox</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#020617' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' },
+                        purple: { 400: '#c084fc', 500: '#a855f7' },
+                        amber: { 400: '#fbbf24', 500: '#f59e0b' },
+                        emerald: { 400: '#34d399', 500: '#10b981' },
+                        rose: { 400: '#f87171', 500: '#ef4444' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        
+        .token-bar { transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-cyan-500 selection:text-slate-950 p-6">
+
+    <main class="max-w-7xl mx-auto space-y-8">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="p-2 bg-gradient-to-r from-cyan-500 via-purple-500 to-amber-500 rounded-lg text-slate-950">
+                    <i class="fa-solid fa-sliders text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-black text-white">LLM Sampling & Token Selection Sandbox</h1>
+                    <p class="text-xs text-slate-400 font-mono">Simulating Temperature Scaling, Nucleus Slicing, and Repetition Logit Deflation</p>
+                </div>
+            </div>
+            <p class="text-slate-400 text-sm leading-relaxed mt-4">
+                When an LLM generates text, it maps out a raw list of scores (Logits) for every word in its vocabulary. Sampling parameters shape this distribution before the final token choice is made. Adjust the sliders below to see how the candidate probability distribution modifies in real time.
+            </p>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+            
+            <div class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-6">
+                <h3 class="text-sm font-bold text-white uppercase font-mono border-b border-slate-800 pb-2 flex items-center gap-2">
+                    <i class="fa-solid fa-gears text-cyan-400"></i> Hyperparameter Panel
+                </h3>
+
+                <div class="space-y-1">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="font-bold text-slate-300">Temperature ($T$)</span>
+                        <span id="val-temp" class="font-mono text-cyan-400 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">1.00</span>
+                    </div>
+                    <input type="range" id="slider-temp" min="0.1" max="2.0" step="0.05" value="1.0" class="w-full accent-cyan-400 cursor-pointer">
+                    <p class="text-[10px] text-slate-500 leading-tight">Scales logits. Low values collapse choice down to deterministic picks; high values flatten diversity.</p>
+                </div>
+
+                <div class="space-y-1">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="font-bold text-slate-300">Top-K Cutoff</span>
+                        <span id="val-topk" class="font-mono text-purple-400 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">5</span>
+                    </div>
+                    <input type="range" id="slider-topk" min="1" max="5" step="1" value="5" class="w-full accent-purple-400 cursor-pointer">
+                    <p class="text-[10px] text-slate-500 leading-tight">Hard token limitation boundary. Discards all candidates outside the top $K$ choices.</p>
+                </div>
+
+                <div class="space-y-1">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="font-bold text-slate-300">Top-P (Nucleus)</span>
+                        <span id="val-topp" class="font-mono text-amber-400 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">1.00</span>
+                    </div>
+                    <input type="range" id="slider-topp" min="0.1" max="1.0" step="0.05" value="1.0" class="w-full accent-amber-400 cursor-pointer">
+                    <p class="text-[10px] text-slate-500 leading-tight">Dynamic selection pool. Truncates candidates the instant their cumulative probability hits $P$.</p>
+                </div>
+
+                <div class="border-t border-slate-800 pt-4 space-y-4">
+                    <div class="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase font-mono mb-2">
+                        <i class="fa-solid fa-redo text-emerald-400"></i> Penalty Logit Adjusters
+                    </div>
+                    
+                    <div class="space-y-1">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="text-slate-400 font-medium">Historical Token Repetition Count</span>
+                            <span id="val-count" class="font-mono text-emerald-400 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">0</span>
+                        </div>
+                        <input type="range" id="slider-count" min="0" max="4" step="1" value="0" class="w-full accent-emerald-400 cursor-pointer">
+                        <p class="text-[10px] text-slate-500 leading-tight">Simulates how many times the candidate token <b class="text-slate-300">"learning"</b> has appeared in past outputs.</p>
+                    </div>
+
+                    <div class="space-y-1">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="font-bold text-slate-300">Frequency Penalty</span>
+                            <span id="val-freq" class="font-mono text-emerald-400 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">0.00</span>
+                        </div>
+                        <input type="range" id="slider-freq" min="0.0" max="2.0" step="0.1" value="0.0" class="w-full accent-emerald-400 cursor-pointer">
+                        <p class="text-[10px] text-slate-500 leading-tight">Deflates logits linearly based on *how many times* a word has been used.</p>
+                    </div>
+
+                    <div class="space-y-1">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="font-bold text-slate-300">Presence Penalty</span>
+                            <span id="val-pres" class="font-mono text-emerald-400 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">0.00</span>
+                        </div>
+                        <input type="range" id="slider-pres" min="0.0" max="2.0" step="0.1" value="0.0" class="w-full accent-emerald-400 cursor-pointer">
+                        <p class="text-[10px] text-slate-500 leading-tight">Deflates logits by a flat amount if a word has appeared *at least once*, encouraging subject shifts.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between space-y-6">
+                <div>
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                        <span class="text-xs font-bold font-mono tracking-wide text-white uppercase"><i class="fa-solid fa-chart-bar text-cyan-400 mr-1.5"></i> Dynamic Probability Distribution</span>
+                        <span class="text-[9px] font-mono px-2 py-0.5 bg-slate-950 border rounded border-slate-800 text-slate-500 font-bold uppercase">Softmax Probability Outputs</span>
+                    </div>
+
+                    <div id="distribution-bars-container" class="space-y-4 font-mono text-xs">
+                        </div>
+                </div>
+
+                <div class="bg-black rounded-xl border border-slate-800 overflow-hidden shrink-0">
+                    <div class="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                        <span><i class="fa-solid fa-square-root-variable text-purple-400 mr-1.5"></i> sampling_calculations.tex</span>
+                        <span class="text-slate-500 uppercase font-bold text-[9px]">Logit Equations</span>
+                    </div>
+                    <div class="p-4 text-center bg-black min-h-[75px] flex items-center justify-center text-xs text-cyan-300" id="latex-box">
+                        $$\text{Loading math equations}...$$
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // Ground truth initial native logits for 5 mock vocabulary tokens
+        const mockVocab = [
+            { token: "learning", baseLogit: 4.5, countDependant: true },
+            { token: "models", baseLogit: 3.8, countDependant: false },
+            { token: "networks", baseLogit: 2.9, countDependant: false },
+            { token: "data", baseLogit: 1.8, countDependant: false },
+            { token: "computer", baseLogit: 0.5, countDependant: false }
+        ];
+
+        function runSamplingEngine() {
+            // Read hyperparameter parameters inputs from slider controllers
+            const temp = parseFloat(document.getElementById('slider-temp').value);
+            const topK = parseInt(document.getElementById('slider-topk').value);
+            const topP = parseFloat(document.getElementById('slider-topp').value);
+            const repCount = parseInt(document.getElementById('slider-count').value);
+            const freqPenalty = parseFloat(document.getElementById('slider-freq').value);
+            const presPenalty = parseFloat(document.getElementById('slider-pres').value);
+
+            // Sync visual control text values indicators
+            document.getElementById('val-temp').innerText = temp.toFixed(2);
+            document.getElementById('val-topk').innerText = topK;
+            document.getElementById('val-topp').innerText = topP.toFixed(2);
+            document.getElementById('val-count').innerText = repCount;
+            document.getElementById('val-freq').innerText = freqPenalty.toFixed(2);
+            document.getElementById('val-pres').innerText = presPenalty.toFixed(2);
+
+            // Phase 1: Apply Presence and Frequency Repetition Penalties onto Logits
+            let processedTokens = mockVocab.map(t => {
+                let adjustedLogit = t.baseLogit;
+                if (t.countDependant && repCount > 0) {
+                    // Formula: modified_logit = logit - (count * freq_penalty) - (presence_penalty)
+                    adjustedLogit = adjustedLogit - (repCount * freqPenalty) - presPenalty;
+                }
+                return { token: t.token, logit: adjustedLogit, rawProbability: 0, status: "Active" };
+            });
+
+            // Phase 2: Apply Temperature Scaling directly onto the modified Logits
+            processedTokens.forEach(t => {
+                t.scaledLogit = t.logit / temp;
+            });
+
+            // Phase 3: Calculate standard Softmax values over current array elements
+            let expSum = processedTokens.reduce((sum, t) => sum + Math.exp(t.scaledLogit), 0);
+            processedTokens.forEach(t => {
+                t.rawProbability = Math.exp(t.scaledLogit) / expSum;
+            });
+
+            // Sort tokens descending by probability to apply Top-K and Top-P accurately
+            processedTokens.sort((a, b) => b.rawProbability - a.rawProbability);
+
+            // Phase 4: Apply Top-K truncation filter boundary
+            processedTokens.forEach((t, idx) => {
+                if (idx >= topK) {
+                    t.status = "Discarded (Top-K)";
+                    t.rawProbability = 0;
+                }
+            });
+
+            // Phase 5: Apply Top-P (Nucleus Sampling) dynamic cutoff boundary
+            let runningSum = 0;
+            let topPBreached = false;
+            processedTokens.forEach(t => {
+                if (t.status === "Active") {
+                    if (topPBreached) {
+                        t.status = "Discarded (Top-P)";
+                        t.rawProbability = 0;
+                    } else {
+                        runningSum += t.rawProbability;
+                        if (runningSum >= topP) {
+                            topPBreached = true; // Subsequent tokens are culled
+                        }
+                    }
+                }
+            });
+
+            // Recalculate normalized probability scores over survivors
+            let finalSum = processedTokens.reduce((sum, t) => sum + t.rawProbability, 0);
+            processedTokens.forEach(t => {
+                t.finalProbability = finalSum > 0 ? (t.rawProbability / finalSum) : 0;
+            });
+
+            // Render updated histogram tracks into view layout container
+            const container = document.getElementById('distribution-bars-container');
+            container.innerHTML = '';
+
+            processedTokens.forEach(t => {
+                const pct = (t.finalProbability * 100).toFixed(1);
+                let barColor = "bg-cyan-500";
+                let textOpacity = "opacity-100";
+
+                if (t.status.includes("Top-K")) {
+                    barColor = "bg-purple-950/40 border border-purple-900/30";
+                    textOpacity = "opacity-30";
+                } else if (t.status.includes("Top-P")) {
+                    barColor = "bg-amber-950/40 border border-amber-900/30";
+                    textOpacity = "opacity-30";
+                } else if (t.token === "learning" && repCount > 0) {
+                    barColor = "bg-emerald-500";
+                }
+
+                const itemRow = document.createElement('div');
+                itemRow.className = `space-y-1 ${textOpacity}`;
+                itemRow.innerHTML = `
+                    <div class="flex justify-between font-mono text-[11px]">
+                        <div>
+                            <span class="font-bold text-white w-20 inline-block">"${t.token}"</span>
+                            <span class="text-slate-500 text-[10px]">Logit: ${t.logit.toFixed(2)} $\\rightarrow$ Scaled: ${t.scaledLogit.toFixed(2)}</span>
+                        </div>
+                        <span class="font-bold text-slate-300">${pct}% <span class="text-[9px] text-slate-500 font-normal">(${t.status})</span></span>
+                    </div>
+                    <div class="w-full bg-slate-950 h-3 border border-slate-900 rounded-sm overflow-hidden">
+                        <div class="h-full ${barColor} token-bar" style="width: ${pct}%;"></div>
+                    </div>
+                `;
+                container.appendChild(itemRow);
+            });
+
+            // Format formula strings block matching parameters configurations using double backslashes safely
+            document.getElementById('latex-box').innerText = 
+                `$$L'_i = L_i - (${repCount} \\\\cdot ${freqPenalty.toFixed(1)}) - ${presPenalty.toFixed(1)} \\\\\\\\ P(t_i) = \\\\frac{e^{L'_i / ${temp.toFixed(2)}}}{\\\\sum_j e^{L'_j / ${temp.toFixed(2)}}}$$`;
+
+            // Prompt MathJax parsing passes
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+        }
+
+        // Attach listening change hooks onto control components
+        ['slider-temp', 'slider-topk', 'slider-topp', 'slider-count', 'slider-freq', 'slider-pres'].forEach(id => {
+            document.getElementById(id).addEventListener('input', runSamplingEngine);
+        });
+
+        // Initialize application pipeline loop on window generation complete
+        window.onload = () => {
+            runSamplingEngine();
+        }
+    </script>
+</body>
+</html>
